@@ -5,6 +5,7 @@ import subprocess
 from tempfile import NamedTemporaryFile
 
 from fastapi import UploadFile
+from starlette.concurrency import run_in_threadpool
 
 from ml_service.api.schemas import AudioEvidence, ServiceAnalyzeResponse
 from ml_service.config import settings
@@ -26,8 +27,8 @@ class AudioService:
         with NamedTemporaryFile(suffix=suffix, delete=True) as tmp:
             tmp.write(await file.read())
             tmp.flush()
-            duration = _probe_duration(Path(tmp.name))
-            ai_probability, error_message = _run_audio_model(Path(tmp.name))
+            duration = await run_in_threadpool(_probe_duration, Path(tmp.name))
+            ai_probability, error_message = await run_in_threadpool(_run_audio_model, Path(tmp.name))
 
         evidence = AudioEvidence(
             phrase_expected=phrase_expected,

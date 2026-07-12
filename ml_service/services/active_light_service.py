@@ -6,6 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from fastapi import UploadFile
+from starlette.concurrency import run_in_threadpool
 
 from ml_service.api.schemas import ActiveLightAnalyzeRequest, ActiveLightEvidence, ServiceAnalyzeResponse
 from ml_service.config import Settings
@@ -75,16 +76,10 @@ async def _run_face_flashing_verifier(*, manifest: str, files: list[UploadFile])
         raise RuntimeError("face_flashing manifest has no pairs")
 
     uploads = {file.filename: file for file in files if file.filename}
-    extractor = FaceExtractor()
-    light_pairs = []
-    with TemporaryDirectory() as tmp_dir_raw:
-        tmp_dir = Path(tmp_dir_raw)
-        saved: dict[str, Path] = {}
-        for name, upload in uploads.items():
-            path = tmp_dir / Path(name).name
-            path.write_bytes(await upload.read())
-            saved[name] = path
 
+    def build_pairs(saved: dict[str, Path]) -> list:
+        extractor = FaceExtractor()
+        light_pairs = []
         for pair in pairs_spec:
             background_name = pair.get("background_file")
             lighting_name = pair.get("lighting_file")
@@ -106,10 +101,21 @@ async def _run_face_flashing_verifier(*, manifest: str, files: list[UploadFile])
                     lighting_rgb=lighting_face.image_rgb,
                 )
             )
+        return light_pairs
+
+    with TemporaryDirectory() as tmp_dir_raw:
+        tmp_dir = Path(tmp_dir_raw)
+        saved: dict[str, Path] = {}
+        for name, upload in uploads.items():
+            path = tmp_dir / Path(name).name
+            path.write_bytes(await upload.read())
+            saved[name] = path
+        # Face extraction over every uploaded frame is CPU-heavy — keep it off the event loop.
+        light_pairs = await run_in_threadpool(build_pairs, saved)
 
     if not light_pairs:
         raise RuntimeError("no valid face frame pairs for face_flashing verifier")
-    result = ActiveLightLivenessVerifier().verify(light_pairs)
+    result = await run_in_threadpool(ActiveLightLivenessVerifier().verify, light_pairs)
     return active_light_result_to_dict(result, include_pairs=False)
 
 
