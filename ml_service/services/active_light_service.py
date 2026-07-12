@@ -93,14 +93,18 @@ async def _run_face_flashing_verifier(*, manifest: str, files: list[UploadFile])
             lighting_face = extractor.extract(bgr_to_rgb(lighting_bgr), allow_reuse=True)
             if background_face is None or lighting_face is None:
                 continue
-            light_pairs.append(
-                LightPair(
-                    background_challenge=Challenge.from_dict(pair["background_challenge"]),
-                    background_rgb=background_face.image_rgb,
-                    lighting_challenge=Challenge.from_dict(pair["lighting_challenge"]),
-                    lighting_rgb=lighting_face.image_rgb,
+            try:
+                light_pairs.append(
+                    LightPair(
+                        background_challenge=Challenge.from_dict(pair["background_challenge"]),
+                        background_rgb=background_face.image_rgb,
+                        lighting_challenge=Challenge.from_dict(pair["lighting_challenge"]),
+                        lighting_rgb=lighting_face.image_rgb,
+                    )
                 )
-            )
+            except Exception:
+                # Client-supplied manifest — a malformed pair is skipped, not a 500.
+                continue
         return light_pairs
 
     with TemporaryDirectory() as tmp_dir_raw:
