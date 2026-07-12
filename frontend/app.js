@@ -60,6 +60,7 @@ const state = {
   gestureAttempt: null,
   serviceEvidence: {},
   stepIndex: 0,
+  scored: false,
   skipped: new Set(),
   stepStatus: {},
   expectedLuma: [],
@@ -157,7 +158,9 @@ function renderStep() {
     return;
   }
 
-  el.primaryAction.disabled = false;
+  // The challenge is one-time on the server: after a successful score the
+  // session is consumed, so resubmitting would just 404.
+  el.primaryAction.disabled = step.id === "score" && state.scored;
   el.skipStep.disabled = !TEST_SKIP_ENABLED || step.id === "score";
   el.currentStep.textContent = step.title;
   el.stageValue.textContent = displayValue(step);
@@ -217,6 +220,7 @@ function advance() {
 
 function resetEvidence() {
   state.stepIndex = 0;
+  state.scored = false;
   state.skipped = new Set();
   state.stepStatus = {};
   state.expectedLuma = [];
@@ -602,6 +606,7 @@ async function submitEvidence() {
     method: "POST",
     body: JSON.stringify(payload),
   });
+  state.scored = true;
   el.decision.className = `decision ${result.decision}`;
   el.decision.textContent = result.decision;
   el.scoreJson.textContent = JSON.stringify(result, null, 2);
