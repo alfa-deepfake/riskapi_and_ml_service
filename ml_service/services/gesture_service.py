@@ -175,10 +175,13 @@ def _run_touch_detector(
                 break
     cap.release()
 
-    face_present = _face_reliably_present(face_frames, frame_count)
-    # A gesture is only "completed" if the subject's face was actually in frame:
-    # a finger touching a mouth that only flickered into view is not liveness.
-    confirmed = confirmed and face_present
+    # A sustained touch streak already requires face/pose landmarks on every
+    # streak frame, so a *confirmed* gesture IS presence — a wall cannot sustain a
+    # hold_frames-long touch on the target landmark. The early break truncates
+    # frame_count, so applying the ratio floor to a confirmed gesture wrongly
+    # rejected fast, genuine gestures. The ratio guard is only meaningful on the
+    # non-confirmed path, which always runs the full clip (no early break).
+    face_present = _gesture_face_present(confirmed, face_frames, frame_count)
     confidence = 0.0 if best_distance is None else max(0.0, min(1.0, 1.0 - best_distance / max(threshold * 2.0, 1e-6)))
     return {
         "observed_action": expected_action if confirmed else "not_completed",
@@ -200,6 +203,13 @@ def _face_reliably_present(face_frames: int, processed_frames: int) -> bool:
     if processed_frames <= 0:
         return False
     return face_frames >= FACE_MIN_FRAMES and face_frames >= FACE_MIN_RATIO * processed_frames
+
+
+def _gesture_face_present(confirmed: bool, face_frames: int, processed_frames: int) -> bool:
+    # A confirmed touch streak requires tracked face/pose landmarks on every
+    # streak frame, so it is presence on its own. Otherwise fall back to the
+    # ratio guard over the (fully processed) clip.
+    return confirmed or _face_reliably_present(face_frames, processed_frames)
 
 
 def _import_mediapipe():
