@@ -11,9 +11,8 @@ services:
 
   ml-service:
     build:
-      context: ..
-      dockerfile: production/Dockerfile
-      network: host
+      context: .
+      dockerfile: Dockerfile
     environment:
       ML_SERVICE_NAME: alpha-bank-anti-deepfake-ml
       RISK_API_URL: http://risk-api:8000
@@ -32,7 +31,7 @@ services:
   risk-api:
     build:
       context: ../deepfake-riskapi
-      dockerfile: ../production/risk_api.Dockerfile
+      dockerfile: ../riskapi_and_ml_service/risk_api.Dockerfile
     environment:
       MONGODB_URI: mongodb://mongo:27017
       MONGODB_DATABASE: deepfake

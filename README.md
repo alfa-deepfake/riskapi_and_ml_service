@@ -13,7 +13,7 @@ Production contour for anti-deepfake verification. The service owns challenge ge
 ## Run locally
 
 ```bash
-cd production
+cd riskapi_and_ml_service
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
 PYTHONPATH=. pytest
@@ -23,9 +23,12 @@ uvicorn ml_service.main:app --reload --port 8100
 ## Run with Docker Compose
 
 ```bash
-cd production
+cd riskapi_and_ml_service
 docker compose up --build
 ```
+
+The compose stack builds `risk-api` from the sibling `../deepfake-riskapi` repo,
+so both must sit side by side in the `alfa-deepfake/` workspace.
 
 Services:
 
@@ -57,7 +60,7 @@ curl -X POST http://localhost:8100/v1/sessions/{session_id}/evidence \
 
 ## Frontend
 
-The frontend in `production/frontend` is a browser challenge console. It creates a session, renders active light flashes, samples camera luminance, asks for the gesture challenge, records an audio snippet, and submits evidence to the ML service.
+The frontend in `frontend/` is a browser challenge console. It creates a session, renders active light flashes, samples camera luminance, asks for the gesture challenge, records an audio snippet, and submits evidence to the ML service.
 
 Current MVP limitations:
 
