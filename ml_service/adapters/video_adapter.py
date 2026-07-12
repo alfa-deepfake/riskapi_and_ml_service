@@ -67,7 +67,8 @@ class VideoModelAdapter:
                 if face_img is None:
                     continue
 
-                face_hits += 1
+                if input_mode == "face":
+                    face_hits += 1
                 rgb = cv2.cvtColor(face_img, cv2.COLOR_BGR2RGB)
                 clip_pixel_values = video_infer.preprocess_face(
                     rgb,
@@ -124,7 +125,7 @@ class VideoModelAdapter:
             "threshold": threshold,
             "model_name": self._model_name(),
             "frame_count": frame_count,
-            "face_present": True,
+            "face_present": face_hits > 0,
             "face_confidence": min(1.0, face_hits / max(1, len(probabilities))),
             "device": str(device),
             "sampled_frames": len(probabilities),
