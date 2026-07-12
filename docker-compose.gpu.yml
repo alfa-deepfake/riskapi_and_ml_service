@@ -1,0 +1,11 @@
+services:
+  ml-service:
+    build:
+      args:
+        TORCH_INDEX_URL: https://download.pytorch.org/whl/cu124
+        TORCH_PACKAGE: torch==2.5.1+cu124
+    environment:
+      ML_VIDEO_DEVICE: auto
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    gpus: all

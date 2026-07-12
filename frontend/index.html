@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AntiDeepfake Challenge Console</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="flash-fullscreen" id="flashFullscreen" aria-hidden="true"></div>
+    <main class="shell">
+      <section class="workspace">
+        <div class="topbar">
+          <div>
+            <p class="eyebrow">ML verification</p>
+            <h1>Challenge Console</h1>
+          </div>
+          <div class="status" id="status">idle</div>
+        </div>
+
+        <div class="grid">
+          <section class="panel setup">
+            <label>
+              ML API
+              <input id="apiUrl" value="http://localhost:8100" />
+            </label>
+            <label>
+              UID
+              <input id="uid" />
+            </label>
+            <label>
+              Check ID
+              <input id="checkId" />
+            </label>
+            <button id="startVerification">Start verification</button>
+          </section>
+
+          <section class="panel challenge-panel">
+            <div class="challenge-stage" id="challengeStage">
+              <video id="camera" autoplay muted playsinline></video>
+              <div class="stage-overlay">
+                <p id="currentStep">Create a session to start</p>
+                <strong id="stageValue">--</strong>
+                <small id="stepHint">Press Start verification</small>
+              </div>
+            </div>
+            <div class="controls">
+              <button id="primaryAction" disabled>Continue</button>
+              <button id="skipStep" class="test-only" disabled>Skip step</button>
+              <button id="resetFlow">Reset</button>
+            </div>
+          </section>
+
+          <section class="panel evidence">
+            <h2>Tools</h2>
+            <div class="tool-list" id="toolList">
+              <div class="tool active" data-tool="camera">Camera</div>
+              <div class="tool" data-tool="active_light">Active light</div>
+              <div class="tool" data-tool="gesture">Gesture</div>
+              <div class="tool" data-tool="rppg">Pulse rPPG</div>
+              <div class="tool" data-tool="audio">Audio phrase</div>
+              <div class="tool" data-tool="score">Risk score</div>
+            </div>
+            <div class="metric">
+              <span>Active light samples</span>
+              <b id="lightMetric">0</b>
+            </div>
+            <div class="metric">
+              <span>Pulse</span>
+              <b id="pulseMetric">pending</b>
+            </div>
+            <div class="metric">
+              <span>Gesture</span>
+              <b id="gestureMetric">pending</b>
+            </div>
+            <div class="metric">
+              <span>Audio</span>
+              <b id="audioMetric">pending</b>
+            </div>
+            <label>
+              Recognized phrase
+              <input id="phraseInput" placeholder="phrase from challenge" />
+            </label>
+          </section>
+
+          <section class="panel result">
+            <h2>Decision</h2>
+            <div class="decision" id="decision">not scored</div>
+            <pre id="scoreJson">{}</pre>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <script src="./config.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

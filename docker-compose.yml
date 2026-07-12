@@ -1,0 +1,53 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend.Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      ml-service:
+        condition: service_started
+
+  ml-service:
+    build:
+      context: ..
+      dockerfile: production/Dockerfile
+      network: host
+    environment:
+      ML_SERVICE_NAME: alpha-bank-anti-deepfake-ml
+      RISK_API_URL: http://risk-api:8000
+      ML_ENABLE_RISK_API_CALLBACKS: "true"
+      ML_DECISION_ALLOW_THRESHOLD: "0.35"
+      ML_DECISION_DENY_THRESHOLD: "0.72"
+      ML_CORS_ORIGINS: "*"
+      ML_UVICORN_WORKERS: "1"
+      ML_CHALLENGE_TTL_SECONDS: "900"
+    ports:
+      - "8100:8100"
+    depends_on:
+      risk-api:
+        condition: service_started
+
+  risk-api:
+    build:
+      context: ../deepfake-riskapi
+      dockerfile: ../production/risk_api.Dockerfile
+    environment:
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DATABASE: deepfake
+    ports:
+      - "8000:8000"
+    depends_on:
+      mongo:
+        condition: service_started
+
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+volumes:
+  mongo-data:
