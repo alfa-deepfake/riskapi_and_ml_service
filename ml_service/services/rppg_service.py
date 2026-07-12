@@ -4,6 +4,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from fastapi import UploadFile
+from starlette.concurrency import run_in_threadpool
 
 from ml_service.api.schemas import RppgAnalyzeRequest, RppgEvidence, ServiceAnalyzeResponse
 from ml_service.config import Settings
@@ -35,7 +36,7 @@ class RppgService:
             tmp.write(await file.read())
             tmp.flush()
             try:
-                result = _run_rppg_runtime(Path(tmp.name))
+                result = await run_in_threadpool(_run_rppg_runtime, Path(tmp.name))
             except RuntimeError as exc:
                 evidence = RppgEvidence(face_present=face_present, face_confidence=face_confidence)
                 check = unavailable_check("rppg", 0.18, str(exc))

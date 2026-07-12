@@ -10,6 +10,7 @@ from tempfile import NamedTemporaryFile
 from typing import Callable
 
 from fastapi import UploadFile
+from starlette.concurrency import run_in_threadpool
 
 from ml_service.api.schemas import GestureEvidence, ServiceAnalyzeResponse
 from ml_service.core.checks import score_gesture
@@ -31,7 +32,8 @@ class GestureService:
             tmp.write(await file.read())
             tmp.flush()
             try:
-                result = _run_touch_detector(Path(tmp.name), expected_action)
+                # Mediapipe processes up to max_frames synchronously — keep it off the event loop.
+                result = await run_in_threadpool(_run_touch_detector, Path(tmp.name), expected_action)
             except RuntimeError as exc:
                 evidence = GestureEvidence(expected_action=expected_action, detector="hands-pose-face-mesh", face_present=face_present)
                 check = unavailable_check("gesture", 0.15, str(exc))

@@ -4,6 +4,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from fastapi import UploadFile
+from starlette.concurrency import run_in_threadpool
 
 from ml_service.api.schemas import ClassifierEvidence, ServiceAnalyzeResponse
 from ml_service.config import settings
@@ -21,7 +22,7 @@ class ClassifierService:
             tmp.write(await file.read())
             tmp.flush()
             try:
-                result = _run_video_model(Path(tmp.name))
+                result = await run_in_threadpool(_run_video_model, Path(tmp.name))
             except Exception as exc:
                 result = None
                 error_message = f"video classifier inference failed: {type(exc).__name__}"
