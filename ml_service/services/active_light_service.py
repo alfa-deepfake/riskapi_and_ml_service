@@ -11,7 +11,7 @@ from starlette.concurrency import run_in_threadpool
 from ml_service.api.schemas import ActiveLightAnalyzeRequest, ActiveLightEvidence, ServiceAnalyzeResponse
 from ml_service.config import Settings
 from ml_service.core.checks import score_active_light
-from ml_service.services.common import service_response, unavailable_check
+from ml_service.services.common import read_upload, service_response, unavailable_check
 
 
 class ActiveLightService:
@@ -112,7 +112,7 @@ async def _run_face_flashing_verifier(*, manifest: str, files: list[UploadFile])
         saved: dict[str, Path] = {}
         for name, upload in uploads.items():
             path = tmp_dir / Path(name).name
-            path.write_bytes(await upload.read())
+            path.write_bytes(await read_upload(upload))
             saved[name] = path
         # Face extraction over every uploaded frame is CPU-heavy — keep it off the event loop.
         light_pairs = await run_in_threadpool(build_pairs, saved)
