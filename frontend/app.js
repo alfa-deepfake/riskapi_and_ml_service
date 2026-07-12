@@ -334,7 +334,9 @@ async function runLight() {
       el.stage.style.backgroundColor = color;
       el.stageValue.textContent = value > 127 ? "WHITE" : "BLACK";
       await sleep(LIGHT_SETTLE_MS);
-      state.observedLuma.push(await sampleStableCameraLuma(value));
+      // Neutral fallback: if the camera frame is unavailable the sample must NOT
+      // default to the expected value, or the check passes without a camera.
+      state.observedLuma.push(await sampleStableCameraLuma(128));
     }
   } finally {
     el.flashFullscreen.classList.remove("visible");
