@@ -143,39 +143,41 @@ def _run_touch_detector(
     mp_hands = mp.solutions.hands
     mp_pose = mp.solutions.pose
     mp_face_mesh = mp.solutions.face_mesh
-    with (
-        mp_hands.Hands(max_num_hands=2, model_complexity=1, min_detection_confidence=0.55, min_tracking_confidence=0.55) as hands,
-        mp_pose.Pose(model_complexity=1, min_detection_confidence=0.55, min_tracking_confidence=0.55) as pose,
-        mp_face_mesh.FaceMesh(max_num_faces=1, refine_landmarks=True, min_detection_confidence=0.55, min_tracking_confidence=0.55) as face_mesh,
-    ):
-        while frame_count < max_frames:
-            ok, frame = cap.read()
-            if not ok:
-                break
-            frame_count += 1
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            rgb.flags.writeable = False
-            hand_results = hands.process(rgb)
-            pose_results = pose.process(rgb)
-            face_results = face_mesh.process(rgb)
-            rgb.flags.writeable = True
+    try:
+        with (
+            mp_hands.Hands(max_num_hands=2, model_complexity=1, min_detection_confidence=0.55, min_tracking_confidence=0.55) as hands,
+            mp_pose.Pose(model_complexity=1, min_detection_confidence=0.55, min_tracking_confidence=0.55) as pose,
+            mp_face_mesh.FaceMesh(max_num_faces=1, refine_landmarks=True, min_detection_confidence=0.55, min_tracking_confidence=0.55) as face_mesh,
+        ):
+            while frame_count < max_frames:
+                ok, frame = cap.read()
+                if not ok:
+                    break
+                frame_count += 1
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                rgb.flags.writeable = False
+                hand_results = hands.process(rgb)
+                pose_results = pose.process(rgb)
+                face_results = face_mesh.process(rgb)
+                rgb.flags.writeable = True
 
-            target_point = target.resolver(pose_results, face_results)
-            if target_point is not None:
-                face_frames += 1
-            fingers = _iter_fingers(hand_results)
-            if target_point is None or not fingers:
-                touch_streak = 0
-                continue
+                target_point = target.resolver(pose_results, face_results)
+                if target_point is not None:
+                    face_frames += 1
+                fingers = _iter_fingers(hand_results)
+                if target_point is None or not fingers:
+                    touch_streak = 0
+                    continue
 
-            closest_distance = min(_normalized_distance(finger.tip, target_point) for finger in fingers)
-            best_distance = closest_distance if best_distance is None else min(best_distance, closest_distance)
-            touching = closest_distance <= threshold
-            touch_streak = touch_streak + 1 if touching else 0
-            if touch_streak >= hold_frames:
-                confirmed = True
-                break
-    cap.release()
+                closest_distance = min(_normalized_distance(finger.tip, target_point) for finger in fingers)
+                best_distance = closest_distance if best_distance is None else min(best_distance, closest_distance)
+                touching = closest_distance <= threshold
+                touch_streak = touch_streak + 1 if touching else 0
+                if touch_streak >= hold_frames:
+                    confirmed = True
+                    break
+    finally:
+        cap.release()
 
     # A sustained touch streak already requires face/pose landmarks on every
     # streak frame, so a *confirmed* gesture IS presence — a wall cannot sustain a
