@@ -376,7 +376,7 @@ def score_audio(evidence: AudioEvidence | None, challenge: ChallengePlan | None)
     if expected_phrase and evidence.phrase_transcribed:
         phrase_ratio = levenshtein_ratio(expected_phrase, evidence.phrase_transcribed)
     phrase_ok = phrase_ratio is None or phrase_ratio >= 0.78
-    ai_risk = evidence.ai_probability if evidence.ai_probability is not None else 0.40
+    ai_risk = evidence.ai_probability
     speaker_bonus = evidence.speaker_match_probability if evidence.speaker_match_probability is not None else 0.50
     phrase_risk = 0.0 if phrase_ok else 0.70
     risk = clamp01(0.55 * ai_risk + 0.25 * phrase_risk + 0.20 * (1.0 - speaker_bonus))
