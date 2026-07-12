@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Any, Literal
 
 import httpx
+
+
+logger = logging.getLogger(__name__)
 
 
 RiskStatus = Literal["started", "in_progress", "finished"]
@@ -46,6 +50,6 @@ class RiskApiClient:
             async with httpx.AsyncClient(timeout=self._timeout) as client:
                 response = await client.post(f"{self._base_url}{path}", json=payload)
                 response.raise_for_status()
-        except httpx.HTTPError:
+        except httpx.HTTPError as exc:
             # ML decision must be returned even when antifraud storage is temporarily unavailable.
-            return
+            logger.warning("RiskAPI callback failed: POST %s: %s", path, exc)
