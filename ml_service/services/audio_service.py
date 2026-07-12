@@ -37,11 +37,11 @@ class AudioService:
             duration_seconds=duration,
             detector="audio-cnn" if ai_probability is not None else "unavailable",
         )
-        check = score_audio(evidence, challenge=None)
-        message = None if ai_probability is not None else error_message
         if ai_probability is None:
             check = unavailable_check("audio", 0.20, error_message)
-        return service_response(self.name, evidence, check, message=message)
+            return service_response(self.name, evidence, check, message=error_message)
+        check = score_audio(evidence, challenge=None)
+        return service_response(self.name, evidence, check)
 
 
 def _run_audio_model(audio_path: Path) -> tuple[float | None, str]:
