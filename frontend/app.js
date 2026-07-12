@@ -200,7 +200,11 @@ function updateTools() {
 function toolState(id) {
   if (state.skipped.has(id)) return "skipped";
   if (id === "camera") return state.stream ? "done" : "";
-  if (id === "score") return el.decision.textContent !== "not scored" ? "done" : "";
+  if (id === "score") {
+    const decision = el.decision.textContent;
+    if (decision === "not scored") return "";
+    return decision === "allow" ? "done" : "failed";
+  }
   const status = state.stepStatus[id];
   if (!status) return "";
   return status === "passed" ? "done" : "failed";
