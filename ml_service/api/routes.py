@@ -70,6 +70,9 @@ async def score_session_evidence(session_id: str, payload: EvidenceRequest) -> S
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Evidence does not match session owner")
 
     result = scorer.score(payload.to_score_request(session.challenge))
+    # A challenge is one-time: once scored, the same session/evidence cannot be
+    # replayed for another attempt at the same challenge.
+    store.pop(session_id)
     await risk_client.send_status(payload.check_id, uid=payload.uid, status="in_progress", message="ML evidence scored")
     await risk_client.send_result(payload.check_id, uid=payload.uid, score=result.model_dump(mode="json"))
     await risk_client.send_status(
