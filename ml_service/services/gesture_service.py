@@ -133,7 +133,7 @@ def _run_touch_detector(
     if not cap.isOpened():
         raise RuntimeError("could not open gesture video")
 
-    face_seen = False
+    face_frames = 0
     best_distance: float | None = None
     touch_streak = 0
     confirmed = False
@@ -160,7 +160,7 @@ def _run_touch_detector(
 
             target_point = target.resolver(pose_results, face_results)
             if target_point is not None:
-                face_seen = True
+                face_frames += 1
             fingers = _iter_fingers(hand_results)
             if target_point is None or not fingers:
                 touch_streak = 0
@@ -175,14 +175,31 @@ def _run_touch_detector(
                 break
     cap.release()
 
+    face_present = _face_reliably_present(face_frames, frame_count)
+    # A gesture is only "completed" if the subject's face was actually in frame:
+    # a finger touching a mouth that only flickered into view is not liveness.
+    confirmed = confirmed and face_present
     confidence = 0.0 if best_distance is None else max(0.0, min(1.0, 1.0 - best_distance / max(threshold * 2.0, 1e-6)))
     return {
         "observed_action": expected_action if confirmed else "not_completed",
         "confidence": confidence,
-        "face_present": face_seen,
+        "face_present": face_present,
         "frame_count": frame_count,
         "best_distance": best_distance,
     }
+
+
+# ponytail: face must persist across the clip, not flicker on one frame. A single
+# spurious face-mesh hit on a wall/background must not mark the subject "present".
+# Tune these two if real gestures that briefly occlude the face start failing.
+FACE_MIN_FRAMES = 8
+FACE_MIN_RATIO = 0.30
+
+
+def _face_reliably_present(face_frames: int, processed_frames: int) -> bool:
+    if processed_frames <= 0:
+        return False
+    return face_frames >= FACE_MIN_FRAMES and face_frames >= FACE_MIN_RATIO * processed_frames
 
 
 def _import_mediapipe():

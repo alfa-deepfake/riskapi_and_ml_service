@@ -61,6 +61,7 @@ const state = {
   serviceEvidence: {},
   stepIndex: 0,
   skipped: new Set(),
+  stepStatus: {},
   expectedLuma: [],
   observedLuma: [],
   gestureDone: false,
@@ -185,20 +186,24 @@ function displayHint(step) {
 function updateTools() {
   document.querySelectorAll(".tool").forEach((item) => {
     const id = item.dataset.tool;
+    const s = toolState(id);
     item.classList.toggle("active", state.session && currentFlowStep()?.id === id);
-    item.classList.toggle("done", isDone(id));
-    item.classList.toggle("skipped", state.skipped.has(id));
+    item.classList.toggle("done", s === "done");
+    item.classList.toggle("failed", s === "failed");
+    item.classList.toggle("skipped", s === "skipped");
   });
 }
 
-function isDone(id) {
-  if (id === "camera") return Boolean(state.stream);
-  if (id === "active_light") return state.observedLuma.length > 0;
-  if (id === "gesture") return state.gestureDone;
-  if (id === "rppg") return Boolean(state.pulse);
-  if (id === "audio") return Boolean(state.audio);
-  if (id === "score") return el.decision.textContent !== "not scored";
-  return false;
+// A tool is only "done" (green) when its check actually PASSED. A check that ran
+// but did not pass ("failed"/"unknown", e.g. no face in frame) shows "failed" —
+// collecting evidence is not the same as passing the check.
+function toolState(id) {
+  if (state.skipped.has(id)) return "skipped";
+  if (id === "camera") return state.stream ? "done" : "";
+  if (id === "score") return el.decision.textContent !== "not scored" ? "done" : "";
+  const status = state.stepStatus[id];
+  if (!status) return "";
+  return status === "passed" ? "done" : "failed";
 }
 
 function advance() {
@@ -209,6 +214,7 @@ function advance() {
 function resetEvidence() {
   state.stepIndex = 0;
   state.skipped = new Set();
+  state.stepStatus = {};
   state.expectedLuma = [];
   state.observedLuma = [];
   state.gestureDone = false;
@@ -343,6 +349,7 @@ async function runLight() {
     }),
   });
   state.serviceEvidence.active_light = analysis.evidence;
+  state.stepStatus.active_light = analysis.status;
   el.lightMetric.textContent = analysis.status;
   setStatus("light captured");
 }
@@ -390,6 +397,7 @@ async function runFaceFlashLight(pairs) {
   form.append("manifest", JSON.stringify({ pairs: manifestPairs }));
   const analysis = await requestForm("/v1/services/active-light/analyze-frame-pairs", form);
   state.serviceEvidence.active_light = analysis.evidence;
+  state.stepStatus.active_light = analysis.status;
   state.expectedLuma = pairs.map((pair) => pair.lighting.lighting_rgb?.[0] ?? 255);
   state.observedLuma = new Array(pairs.length).fill(0);
   el.lightMetric.textContent = analysis.status;
@@ -427,6 +435,7 @@ async function confirmGesture() {
   state.serviceEvidence.gesture = analysis.evidence;
   state.gestureAttempt = analysis.evidence;
   state.gestureDone = analysis.status === "passed";
+  state.stepStatus.gesture = analysis.status;
   el.gestureMetric.textContent = analysis.status;
   setStatus(`gesture ${analysis.status}`);
 }
@@ -445,6 +454,7 @@ async function samplePulse() {
       bpm: analysis.evidence.bpm ?? null,
       signal_quality: analysis.evidence.signal_quality ?? null,
     };
+    state.stepStatus.rppg = analysis.status;
     el.pulseMetric.textContent = analysis.status;
     setStatus(`pulse ${analysis.status}`);
     return;
@@ -468,6 +478,7 @@ async function samplePulse() {
     }),
   });
   state.serviceEvidence.rppg = analysis.evidence;
+  state.stepStatus.rppg = analysis.status;
   el.pulseMetric.textContent = analysis.status;
   setStatus("pulse sampled");
 }
@@ -491,6 +502,7 @@ async function recordAudio() {
     form.append("phrase_transcribed", el.phraseInput.value || "");
     const analysis = await requestForm("/v1/services/audio/analyze", form);
     state.serviceEvidence.audio = analysis.evidence;
+    state.stepStatus.audio = analysis.status;
     el.audioMetric.textContent = analysis.status;
   } catch (_error) {
     state.audio = { duration_seconds: 3.0 };
@@ -500,6 +512,7 @@ async function recordAudio() {
       duration_seconds: 3.0,
       detector: "browser_recording_failed",
     };
+    state.stepStatus.audio = "unknown";
     el.audioMetric.textContent = "unknown";
   }
 
@@ -590,6 +603,7 @@ async function submitEvidence() {
 }
 
 function applySkipEvidence(id) {
+  state.stepStatus[id] = "skipped";
   if (id === "camera") return;
   if (id === "active_light") {
     const step = getStep("active_light");

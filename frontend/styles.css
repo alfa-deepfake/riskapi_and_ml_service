@@ -255,6 +255,16 @@ video {
   color: var(--green);
 }
 
+.tool.failed {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.tool.failed::after {
+  content: "failed";
+  color: var(--red);
+}
+
 .tool.skipped {
   border-color: var(--amber);
   color: var(--amber);
