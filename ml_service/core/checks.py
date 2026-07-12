@@ -184,7 +184,13 @@ def score_rppg(evidence: RppgEvidence | None, settings: Settings) -> CheckScore:
             reason="rPPG cannot pass without a detected face ROI",
             details={"face_present": evidence.face_present, "face_confidence": evidence.face_confidence},
         )
-    if evidence.detector == "python-rppg" or str(evidence.detector or "").startswith("rppg-toolbox"):
+    # Model-output evidence (bpm + signal quality, no raw samples) is scored on
+    # the model path regardless of the exact detector label the runtime reports.
+    if (
+        evidence.detector == "python-rppg"
+        or str(evidence.detector or "").startswith("rppg-toolbox")
+        or (evidence.signal_quality is not None and not evidence.samples)
+    ):
         return _score_python_rppg(evidence)
     if not evidence.samples or not evidence.sample_rate_hz:
         return CheckScore(
