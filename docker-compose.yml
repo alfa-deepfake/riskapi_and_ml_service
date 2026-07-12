@@ -3,8 +3,12 @@ services:
     build:
       context: .
       dockerfile: frontend.Dockerfile
+    # Host ports are overridable for shared/busy hosts, e.g.
+    #   RISK_API_PORT=8001 MONGO_PORT=27018 docker compose up
+    # Internal service-to-service ports never change, so ml->risk stays wired.
+    # NB: changing ML_PORT also requires updating frontend/config.js (browser URL).
     ports:
-      - "8080:80"
+      - "${FRONTEND_PORT:-8080}:80"
     depends_on:
       ml-service:
         condition: service_started
@@ -23,7 +27,7 @@ services:
       ML_UVICORN_WORKERS: "1"
       ML_CHALLENGE_TTL_SECONDS: "900"
     ports:
-      - "8100:8100"
+      - "${ML_PORT:-8100}:8100"
     depends_on:
       risk-api:
         condition: service_started
@@ -36,7 +40,7 @@ services:
       MONGODB_URI: mongodb://mongo:27017
       MONGODB_DATABASE: deepfake
     ports:
-      - "8000:8000"
+      - "${RISK_API_PORT:-8000}:8000"
     depends_on:
       mongo:
         condition: service_started
@@ -44,7 +48,7 @@ services:
   mongo:
     image: mongo:7
     ports:
-      - "27017:27017"
+      - "${MONGO_PORT:-27017}:27017"
     volumes:
       - mongo-data:/data/db
 
