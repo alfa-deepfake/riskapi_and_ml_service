@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     active_light_min_correlation: float = Field(default=0.55, alias="ML_ACTIVE_LIGHT_MIN_CORRELATION")
     active_light_min_contrast: float = Field(default=0.08, alias="ML_ACTIVE_LIGHT_MIN_CONTRAST")
     active_light_min_temporal_correlation: float = Field(default=0.65, alias="ML_ACTIVE_LIGHT_MIN_TEMPORAL_CORRELATION")
+    active_light_min_pair_count: int = Field(default=4, alias="ML_ACTIVE_LIGHT_MIN_PAIR_COUNT")
+    active_light_min_spatial_contrast: float = Field(default=0.025, alias="ML_ACTIVE_LIGHT_MIN_SPATIAL_CONTRAST")
+    active_light_min_response_snr: float = Field(default=0.04, alias="ML_ACTIVE_LIGHT_MIN_RESPONSE_SNR")
+    active_light_min_color_cosine: float = Field(default=0.15, alias="ML_ACTIVE_LIGHT_MIN_COLOR_COSINE")
     rppg_min_signal_quality: float = Field(default=0.35, alias="ML_RPPG_MIN_SIGNAL_QUALITY")
 
     audio_model_path: str = Field(default="models/audio/cnn_model.pt", alias="ML_AUDIO_MODEL_PATH")
