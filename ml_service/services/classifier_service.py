@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
@@ -51,15 +52,26 @@ def _run_video_model(video_path: Path) -> dict | None:
     model_path = Path(settings.video_clip_checkpoint_path)
     if not model_path.exists():
         return None
-    convnext_path = Path(settings.video_convnext_checkpoint_path) if settings.video_convnext_checkpoint_path else None
+    adapter = _get_adapter()
+    if adapter is None:
+        return None
+    return adapter.predict(video_path)
+
+
+@lru_cache(maxsize=1)
+def _get_adapter():
+    # One adapter for the process lifetime — the checkpoint load inside the
+    # adapter is cached per instance, so a per-request adapter reloads the model
+    # on every call.
     try:
         from ml_service.adapters.video_adapter import VideoModelAdapter
     except ImportError:
         return None
+    convnext_path = Path(settings.video_convnext_checkpoint_path) if settings.video_convnext_checkpoint_path else None
     return VideoModelAdapter(
-        checkpoint_path=model_path,
+        checkpoint_path=Path(settings.video_clip_checkpoint_path),
         convnext_checkpoint_path=convnext_path,
         device=settings.video_device,
         max_inferences=settings.video_max_inferences,
         infer_every=settings.video_infer_every,
-    ).predict(video_path)
+    )
