@@ -3,10 +3,11 @@ services:
     build:
       context: .
       dockerfile: frontend.Dockerfile
-    # Host ports are overridable for shared/busy hosts, e.g.
+    # Host ports are overridable for shared/busy hosts via env or a local .env, e.g.
     #   RISK_API_PORT=8001 MONGO_PORT=27018 docker compose up
     # Internal service-to-service ports never change, so ml->risk stays wired.
-    # NB: changing ML_PORT also requires updating frontend/config.js (browser URL).
+    # NB: changing ML_PORT also means editing frontend/config.js (browser URL) AND
+    # rebuilding the frontend image — config.js is COPYed into it at build time.
     ports:
       - "${FRONTEND_PORT:-8080}:80"
     depends_on:

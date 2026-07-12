@@ -1,4 +1,0 @@
-services:
-  risk-api:
-    ports: !override
-      - "8002:8000"          # 8002 — свободный порт хоста; внутри сети risk-api:8000

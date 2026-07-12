@@ -1,0 +1,7 @@
+# Host-specific runtime config — never commit (forces its ports on every host).
+.env
+docker-compose.override.yml
+
+# Python bytecode
+__pycache__/
+*.pyc
