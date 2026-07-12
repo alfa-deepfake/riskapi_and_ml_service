@@ -22,4 +22,7 @@ COPY ml_service /app/ml_service
 # checkpoints into /app/models before the CMD.
 
 EXPOSE 8100
+# Sessions/challenges live in process memory (ChallengeStore) — with more than
+# one worker a session created in one worker 404s in another. Keep workers=1
+# unless the store is externalized.
 CMD ["sh", "-c", "uvicorn ml_service.main:app --host 0.0.0.0 --port 8100 --workers ${ML_UVICORN_WORKERS:-1}"]
