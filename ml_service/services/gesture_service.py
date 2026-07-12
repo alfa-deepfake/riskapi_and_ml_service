@@ -14,7 +14,7 @@ from starlette.concurrency import run_in_threadpool
 
 from ml_service.api.schemas import GestureEvidence, ServiceAnalyzeResponse
 from ml_service.core.checks import score_gesture
-from ml_service.services.common import service_response, unavailable_check
+from ml_service.services.common import read_upload, service_response, unavailable_check
 
 
 class GestureService:
@@ -29,7 +29,7 @@ class GestureService:
     ) -> ServiceAnalyzeResponse:
         suffix = Path(file.filename or "gesture.webm").suffix or ".webm"
         with NamedTemporaryFile(suffix=suffix, delete=True) as tmp:
-            tmp.write(await file.read())
+            tmp.write(await read_upload(file))
             tmp.flush()
             try:
                 # Mediapipe processes up to max_frames synchronously — keep it off the event loop.

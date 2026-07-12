@@ -10,7 +10,7 @@ from starlette.concurrency import run_in_threadpool
 from ml_service.api.schemas import ClassifierEvidence, ServiceAnalyzeResponse
 from ml_service.config import settings
 from ml_service.core.checks import score_classifier
-from ml_service.services.common import service_response, unavailable_check
+from ml_service.services.common import read_upload, service_response, unavailable_check
 
 
 class ClassifierService:
@@ -20,7 +20,7 @@ class ClassifierService:
         suffix = Path(file.filename or "video.webm").suffix or ".webm"
         error_message = None
         with NamedTemporaryFile(suffix=suffix, delete=True) as tmp:
-            tmp.write(await file.read())
+            tmp.write(await read_upload(file))
             tmp.flush()
             try:
                 result = await run_in_threadpool(_run_video_model, Path(tmp.name))
