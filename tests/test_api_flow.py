@@ -67,3 +67,10 @@ async def test_session_challenge_and_evidence_flow():
             "gesture",
             "audio",
         }
+
+        # The challenge is one-time: a scored session cannot be replayed.
+        replay = await client.post(
+            f"/v1/sessions/{session['session_id']}/evidence",
+            json={"uid": "u-api", "check_id": "c-api", "evidence": {}},
+        )
+        assert replay.status_code == 404

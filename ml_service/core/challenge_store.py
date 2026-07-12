@@ -43,6 +43,9 @@ class ChallengeStore:
         self._collect_expired()
         return self._sessions.get(session_id)
 
+    def pop(self, session_id: str) -> None:
+        self._sessions.pop(session_id, None)
+
     def _collect_expired(self) -> None:
         now = datetime.now(timezone.utc)
         expired = [session_id for session_id, session in self._sessions.items() if session.expires_at <= now]
