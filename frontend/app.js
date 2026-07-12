@@ -501,7 +501,7 @@ async function recordAudio() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     const started = performance.now();
-    const blob = await recordStreamBlob(stream, 3000);
+    const blob = await recordStreamBlob(stream, audioStep.duration_ms || 4000);
     stream.getTracks().forEach((track) => track.stop());
     state.audio = {
       duration_seconds: (performance.now() - started) / 1000,
