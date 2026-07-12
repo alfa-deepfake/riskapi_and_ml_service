@@ -59,6 +59,53 @@ def test_low_risk_evidence_is_allowed():
     assert not [check for check in result.checks if check.status == "failed"]
 
 
+def test_failed_classifier_blocks_allow_despite_passing_liveness():
+    challenge = generate_challenge(seed=13)
+    light = next(step for step in challenge.steps if step.type == "active_light")
+    gesture = next(step for step in challenge.steps if step.type == "gesture")
+    audio = next(step for step in challenge.steps if step.type == "audio_phrase")
+
+    result = CascadeScorer(settings).score(
+        ScoreRequest(
+            uid="u1",
+            check_id="c1",
+            challenge=challenge,
+            evidence=EvidenceBundle(
+                classifier=ClassifierEvidence(fake_probability=0.95, confidence=0.95, face_present=True),
+                active_light=ActiveLightEvidence(
+                    expected_luma=light.payload["luma_sequence"],
+                    observed_face_luma=light.payload["luma_sequence"],
+                    face_present=True,
+                ),
+                rppg=RppgEvidence(
+                    samples=[100.0, 105.8, 109.5, 109.5, 105.8, 100.0, 94.2, 90.5, 90.5, 94.2] * 12,
+                    sample_rate_hz=10,
+                    window_seconds=4,
+                    face_present=True,
+                ),
+                gesture=GestureEvidence(
+                    expected_action=gesture.payload["expected_action"],
+                    observed_action=gesture.payload["expected_action"],
+                    confidence=0.9,
+                    detector="unit-test-detector",
+                    face_present=True,
+                ),
+                audio=AudioEvidence(
+                    phrase_expected=audio.payload["phrase"],
+                    phrase_transcribed=audio.payload["phrase"],
+                    ai_probability=0.04,
+                    speaker_match_probability=0.91,
+                ),
+            ),
+        )
+    )
+
+    # A flagged deepfake must never be averaged away into "allow". With clean
+    # liveness signals the averaged risk lands in the review band — a single
+    # failed check escalates to review, only a consistently bad set denies.
+    assert result.decision == "review"
+
+
 def test_high_risk_classifier_and_audio_are_denied():
     result = CascadeScorer(settings).score(
         ScoreRequest(

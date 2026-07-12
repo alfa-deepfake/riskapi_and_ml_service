@@ -52,14 +52,18 @@ def _weighted_confidence(checks: list[CheckScore]) -> float:
 
 
 def _decision(checks: list[CheckScore], risk_score: float, *, allow_threshold: float, deny_threshold: float):
-    hard_checks = {"active_light", "rppg", "gesture", "audio"}
-    hard_statuses = {check.name: check.status for check in checks if check.name in hard_checks}
-    if any(status == "failed" for status in hard_statuses.values()):
-        return "deny"
-    if any(status in ("unknown", "skipped") for status in hard_statuses.values()):
-        return "review"
+    # Deny is driven by the averaged weighted risk, never by a single check: an
+    # individual check can fail for benign reasons (poor webcam/mic, slow link),
+    # so one bad signal sends the session to review, while consistently bad
+    # signals push the average over the deny threshold. A failed or missing
+    # liveness signal still blocks "allow" — it must not be averaged away.
     if risk_score >= deny_threshold:
         return "deny"
+    hard_checks = {"active_light", "rppg", "gesture", "audio"}
+    if any(check.status == "failed" for check in checks):
+        return "review"
+    if any(check.status in ("unknown", "skipped") for check in checks if check.name in hard_checks):
+        return "review"
     if risk_score <= allow_threshold:
         return "allow"
     return "review"
