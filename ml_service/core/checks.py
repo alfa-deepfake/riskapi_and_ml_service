@@ -86,16 +86,16 @@ def score_active_light(
         temporal = evidence.temporal_correlation if evidence.temporal_correlation is not None else evidence.best_correlation
         passed = bool(
             evidence.pair_count is not None
-            and evidence.pair_count >= 4
+            and evidence.pair_count >= settings.active_light_min_pair_count
             and evidence.verifier_score >= settings.active_light_min_correlation
             and temporal is not None
             and temporal >= settings.active_light_min_temporal_correlation
             and evidence.spatial_contrast is not None
-            and evidence.spatial_contrast >= 0.025
+            and evidence.spatial_contrast >= settings.active_light_min_spatial_contrast
             and evidence.response_snr is not None
-            and evidence.response_snr >= 0.04
+            and evidence.response_snr >= settings.active_light_min_response_snr
             and evidence.color_cosine is not None
-            and evidence.color_cosine >= 0.15
+            and evidence.color_cosine >= settings.active_light_min_color_cosine
         )
         risk = clamp01(1.0 - evidence.verifier_score) if passed else max(clamp01(1.0 - evidence.verifier_score), 0.7)
         return CheckScore(
