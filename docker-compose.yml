@@ -25,7 +25,6 @@ services:
       ML_DECISION_ALLOW_THRESHOLD: "0.35"
       ML_DECISION_DENY_THRESHOLD: "0.72"
       ML_CORS_ORIGINS: "*"
-      ML_UVICORN_WORKERS: "1"
       ML_CHALLENGE_TTL_SECONDS: "900"
     ports:
       - "${ML_PORT:-8100}:8100"
