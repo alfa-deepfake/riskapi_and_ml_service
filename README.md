@@ -80,7 +80,10 @@ The current production code is adapter-based. Heavy models are optional at servi
   ignored. Fake/not-fake threshold is `ML_VIDEO_XGB_THRESHOLD` (default 0.45);
   models dir is `ML_VIDEO_XGB_MODELS_DIR` (default `models/xgb`). When the
   ensemble is absent, the adapter falls back to `neiro_model/video_infer.py`
-  CLIP checkpoints.
+  CLIP checkpoints. Before extraction, every sampled frame is aligned to a
+  512×512 face using the training repo's `train/face_crop.py` (`buffalo_l`
+  landmarks); the adapter validates the exact 38-feature manifest and all six
+  boosters before scoring.
 - Audio anti-spoof: WavLM classifier (vendored `deepfake_audio/` inference code,
   4-generator checkpoint at `ML_AUDIO_MODEL_PATH`, default
   `models/audio/wavlm_all4_best.pt`). The checkpoint is git-ignored (380MB) and

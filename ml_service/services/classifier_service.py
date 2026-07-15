@@ -46,6 +46,9 @@ class ClassifierService:
             frame_count=result.get("frame_count"),
             face_present=detected_face_present if detected_face_present is not None else face_present,
             face_confidence=detected_face_confidence if detected_face_confidence is not None else face_confidence,
+            feature_count=result.get("feature_count"),
+            preprocessing=result.get("preprocessing"),
+            face_size_px=result.get("face_size_px"),
         )
         check = score_classifier(evidence)
         return service_response(self.name, evidence, check)

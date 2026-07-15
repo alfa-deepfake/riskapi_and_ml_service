@@ -52,6 +52,9 @@ class ClassifierEvidence(BaseModel):
     frame_count: int | None = Field(default=None, ge=0)
     face_present: bool | None = None
     face_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    feature_count: int | None = Field(default=None, ge=1)
+    preprocessing: str | None = None
+    face_size_px: float | None = Field(default=None, gt=0.0)
 
 
 class ActiveLightEvidence(BaseModel):

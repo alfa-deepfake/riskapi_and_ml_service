@@ -28,6 +28,12 @@ RUN python -c "from huggingface_hub import snapshot_download; snapshot_download(
 COPY ml_service /app/ml_service
 COPY deepfake_audio /app/deepfake_audio
 COPY face_flashing /app/face_flashing
+COPY train /app/train
+
+# The training cropper uses InsightFace buffalo_l. Fetch the same detector and
+# landmark model at build time so classifier requests remain offline and use
+# exactly the alignment that produced the XGBoost training data.
+RUN python -c "from train.face_crop import _app; _app()"
 
 # The XGBoost ensemble is a runtime dependency of the CPU image. The pinned
 # Faster-Whisper model above is already stored under /app/models/asr/.
