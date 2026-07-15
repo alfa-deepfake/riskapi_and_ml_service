@@ -185,10 +185,11 @@ video {
 
 .face-oval {
   position: absolute;
-  top: 12%;
+  top: 10%;
   left: 50%;
-  width: min(52%, 320px);
-  height: 68%;
+  height: 72%;
+  /* face-shaped ellipse: always taller than wide, never a circle */
+  aspect-ratio: 3 / 4.2;
   transform: translateX(-50%);
   border: 3px dashed rgba(255, 255, 255, 0.85);
   border-radius: 50%;
@@ -433,13 +434,6 @@ video {
   margin: 6px 0 0;
   color: var(--muted);
   font-size: 12px;
-}
-
-.raw-json summary {
-  cursor: pointer;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
 }
 
 pre {
