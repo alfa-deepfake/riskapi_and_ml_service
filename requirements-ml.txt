@@ -3,5 +3,6 @@ opencv-python-headless==4.11.0.86
 mediapipe==0.10.21
 pillow>=10.0
 scipy>=1.11
+xgboost>=2.0,<4.0
 scikit-learn>=1.4
 transformers>=4.40
