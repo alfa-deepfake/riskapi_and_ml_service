@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+from functools import lru_cache
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
@@ -57,33 +59,57 @@ class RppgService:
         return service_response(self.name, evidence, check)
 
 
+_MODEL_LOCK = threading.Lock()
+
+
+@lru_cache(maxsize=1)
+def _rppg_model():
+    # ~65s to build (ONNX session + weights bundled in the open-rppg wheel):
+    # cache for the process lifetime and warm off the request path at startup.
+    import rppg
+
+    return rppg.Model()
+
+
+def warm_rppg_model() -> None:
+    """Preload the rPPG model in the background; never raises."""
+    try:
+        _rppg_model()
+    except Exception:
+        pass
+
+
 def _run_rppg_runtime(video_path: Path) -> dict:
     try:
-        from puls_from_video.for_integration_puls import process_video_file
+        model = _rppg_model()
     except ImportError as exc:
-        raise RuntimeError("rPPG integration module is unavailable") from exc
+        raise RuntimeError("rPPG runtime dependency is missing: pip install open-rppg") from exc
+    except Exception as exc:
+        raise RuntimeError(f"rPPG model load failed: {type(exc).__name__}") from exc
 
     try:
-        result = process_video_file(video_path)
-    except ImportError as exc:
-        raise RuntimeError("rPPG runtime dependency is missing: pip install rppg") from exc
+        # The model is a stateful stream processor — one video at a time.
+        with _MODEL_LOCK:
+            result = model.process_video(str(video_path)) or {}
     except Exception as exc:
         raise RuntimeError(f"rPPG runtime failed: {type(exc).__name__}") from exc
 
-    bpm = _to_float(result.get("hr_bpm"))
+    bpm = _to_float(result.get("hr"))
     if bpm is not None and not (20.0 <= bpm <= 220.0):
         bpm = None
-    sqi = _to_float(result.get("signal_quality"))
+    sqi = _to_float(result.get("SQI"))
     if sqi is not None:
         sqi = max(0.0, min(1.0, sqi))
+    # Face presence stays with the caller-provided evidence: open-rppg's frame
+    # statistics count forward-filled frames and cannot be trusted for it.
     return {
         "bpm": bpm,
         "signal_quality": sqi,
         "latency": _to_float(result.get("latency")),
-        "hrv": {key: _to_float(value) for key, value in result.get("hrv", {}).items()},
+        "hrv": {key: _to_float(value) for key, value in (result.get("hrv") or {}).items()},
         "samples": [],
         "sample_rate_hz": None,
-        "detector": result.get("method") or "rppg-toolbox-pos",
+        "detector": "open-rppg-facephys",
         "face_present": None,
         "face_confidence": None,
     }

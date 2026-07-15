@@ -194,7 +194,7 @@ def score_rppg(evidence: RppgEvidence | None, settings: Settings) -> CheckScore:
     # the model path regardless of the exact detector label the runtime reports.
     if (
         evidence.detector == "python-rppg"
-        or str(evidence.detector or "").startswith("rppg-toolbox")
+        or str(evidence.detector or "").startswith(("rppg-toolbox", "open-rppg"))
         or (evidence.signal_quality is not None and not evidence.samples)
     ):
         return _score_python_rppg(evidence)
