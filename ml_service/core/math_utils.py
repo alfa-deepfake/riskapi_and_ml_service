@@ -61,6 +61,19 @@ def best_lagged_correlation(left: list[float], right: list[float], max_lag: int 
     return best_corr, best_lag
 
 
+def mean_without_lone_dissenter(scores: dict[str, float], threshold: float) -> tuple[float, list[str]]:
+    """Mean of ensemble scores; if exactly one model votes on the opposite
+    side of the threshold from all the others, it is excluded from the mean."""
+    if not scores:
+        raise ValueError("scores must not be empty")
+    fake = [name for name, score in scores.items() if score >= threshold]
+    real = [name for name, score in scores.items() if score < threshold]
+    minority = fake if len(fake) < len(real) else real if len(real) < len(fake) else []
+    dropped = list(minority) if len(minority) == 1 else []
+    kept = [score for name, score in scores.items() if name not in dropped]
+    return fmean(kept), dropped
+
+
 def levenshtein_ratio(expected: str, actual: str) -> float:
     expected = " ".join(expected.lower().split())
     actual = " ".join(actual.lower().split())
