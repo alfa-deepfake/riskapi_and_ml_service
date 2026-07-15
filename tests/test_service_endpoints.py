@@ -142,48 +142,66 @@ async def test_rppg_endpoint_uses_reference_runtime_output(monkeypatch):
     assert body["evidence"]["bpm"] == 73.0
 
 
+def _stub_rppg_model(monkeypatch, process_video):
+    import sys
+    import types
+
+    from ml_service.services import rppg_service as module
+
+    class FakeModel:
+        def process_video(self, path):
+            return process_video(path)
+
+    stub = types.ModuleType("rppg")
+    stub.Model = FakeModel
+    monkeypatch.setitem(sys.modules, "rppg", stub)
+    module._rppg_model.cache_clear()
+    return module
+
+
 @pytest.mark.anyio
 async def test_rppg_runtime_clamps_out_of_range_bpm(monkeypatch):
-    from ml_service.services.rppg_service import _run_rppg_runtime
-
-    fake_module = type("Mod", (), {})()
-
-    def fake_process_video_file(_path):
-        return {"hr_bpm": 350.0, "signal_quality": 1.5, "method": "python-rppg", "hrv": {}}
-
-    import sys, types
-    stub = types.ModuleType("puls_from_video")
-    inner = types.ModuleType("puls_from_video.for_integration_puls")
-    inner.process_video_file = fake_process_video_file
-    stub.for_integration_puls = inner
-    monkeypatch.setitem(sys.modules, "puls_from_video", stub)
-    monkeypatch.setitem(sys.modules, "puls_from_video.for_integration_puls", inner)
-
-    from pathlib import Path
-    result = _run_rppg_runtime(Path("/tmp/does-not-exist.webm"))
+    module = _stub_rppg_model(
+        monkeypatch,
+        lambda _path: {"hr": 350.0, "SQI": 1.5, "hrv": {}, "latency": 0.0},
+    )
+    try:
+        from pathlib import Path
+        result = module._run_rppg_runtime(Path("/tmp/does-not-exist.webm"))
+    finally:
+        module._rppg_model.cache_clear()
     assert result["bpm"] is None
     assert result["signal_quality"] == 1.0
+    assert result["detector"] == "open-rppg-facephys"
     assert result["face_present"] is None
 
 
 @pytest.mark.anyio
-async def test_rppg_runtime_wraps_generic_error_as_runtime_error(monkeypatch):
-    from ml_service.services.rppg_service import _run_rppg_runtime
+async def test_rppg_runtime_handles_no_signal_result(monkeypatch):
+    # open-rppg returns None when no pulse signal was captured at all
+    module = _stub_rppg_model(monkeypatch, lambda _path: None)
+    try:
+        from pathlib import Path
+        result = module._run_rppg_runtime(Path("/tmp/does-not-exist.webm"))
+    finally:
+        module._rppg_model.cache_clear()
+    assert result["bpm"] is None
+    assert result["signal_quality"] is None
+    assert result["detector"] == "open-rppg-facephys"
 
+
+@pytest.mark.anyio
+async def test_rppg_runtime_wraps_generic_error_as_runtime_error(monkeypatch):
     def boom(_path):
         raise ValueError("bad video")
 
-    import sys, types
-    stub = types.ModuleType("puls_from_video")
-    inner = types.ModuleType("puls_from_video.for_integration_puls")
-    inner.process_video_file = boom
-    stub.for_integration_puls = inner
-    monkeypatch.setitem(sys.modules, "puls_from_video", stub)
-    monkeypatch.setitem(sys.modules, "puls_from_video.for_integration_puls", inner)
-
-    from pathlib import Path
-    with pytest.raises(RuntimeError, match="rPPG runtime failed"):
-        _run_rppg_runtime(Path("/tmp/does-not-exist.webm"))
+    module = _stub_rppg_model(monkeypatch, boom)
+    try:
+        from pathlib import Path
+        with pytest.raises(RuntimeError, match="rPPG runtime failed"):
+            module._run_rppg_runtime(Path("/tmp/does-not-exist.webm"))
+    finally:
+        module._rppg_model.cache_clear()
 
 
 @pytest.mark.anyio
