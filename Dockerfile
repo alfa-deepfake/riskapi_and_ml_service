@@ -20,13 +20,15 @@ COPY ml_service /app/ml_service
 COPY deepfake_audio /app/deepfake_audio
 COPY face_flashing /app/face_flashing
 
-# The XGBoost video-classifier ensemble (models/xgb, ~20MB CPU models) ships in
-# the image. Heavy classifier models (torch + neiro_model checkpoints) remain
-# optional at boot: the audio/CLIP adapters degrade to "unavailable" when their
-# checkpoints are absent (see ml_service/services/*_service.py). To build the
-# full GPU model image, install torch and COPY the neiro_model/ checkpoints
-# into /app/models before the CMD.
-COPY models /app/models
+# The XGBoost ensemble and the Whisper ASR snapshot are runtime dependencies of
+# the CPU image. Keep them in separate COPY layers: compose mounts only the
+# optional WavLM checkpoint below, so it cannot hide the server-side ASR model.
+COPY models/xgb /app/models/xgb
+COPY models/asr/whisper-tiny.en /app/models/asr/whisper-tiny.en
+
+# Heavy classifier models (the WavLM checkpoint and neiro_model checkpoints)
+# remain external to the image. WavLM is mounted by compose; full GPU images
+# can additionally COPY neiro_model checkpoints into /app/models before CMD.
 
 EXPOSE 8100
 # Sessions/challenges live in process memory (ChallengeStore), so the service
