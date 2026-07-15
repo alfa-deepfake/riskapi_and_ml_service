@@ -104,11 +104,18 @@ h2 {
 }
 
 .setup,
-.evidence,
-.result {
+.evidence {
   display: grid;
   gap: 12px;
   align-content: start;
+}
+
+.result-block {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
 }
 
 label {
@@ -345,11 +352,19 @@ video {
   min-height: 70px;
   display: grid;
   place-items: center;
+  border: 1px solid var(--line);
   border-radius: 8px;
   background: #ece4d4;
   font-size: 32px;
   font-weight: 900;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+.decision.allow,
+.decision.review,
+.decision.deny {
+  border-color: currentColor;
 }
 
 .decision.allow {
@@ -377,7 +392,8 @@ video {
 
 .checks {
   display: grid;
-  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 6px 22px;
 }
 
 .check-row {

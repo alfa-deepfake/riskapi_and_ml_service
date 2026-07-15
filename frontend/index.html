@@ -53,6 +53,12 @@
               <button id="skipStep" class="test-only" disabled>Skip step</button>
               <button id="resetFlow">Reset</button>
             </div>
+            <div class="result-block">
+              <div class="decision" id="decision">not scored</div>
+              <div class="risk-line" id="riskLine"></div>
+              <div class="checks" id="checksBreakdown"></div>
+              <pre id="scoreJson"></pre>
+            </div>
           </section>
 
           <section class="panel evidence">
@@ -95,13 +101,6 @@
             </label>
           </section>
 
-          <section class="panel result">
-            <h2>Decision</h2>
-            <div class="decision" id="decision">not scored</div>
-            <div class="risk-line" id="riskLine"></div>
-            <div class="checks" id="checksBreakdown"></div>
-            <pre id="scoreJson"></pre>
-          </section>
         </div>
       </section>
     </main>
