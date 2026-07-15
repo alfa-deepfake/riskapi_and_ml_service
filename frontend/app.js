@@ -3,6 +3,9 @@ const TEST_SKIP_ENABLED = Boolean(appConfig.enableTestSkip);
 const LIGHT_SETTLE_MS = Number(appConfig.lightSettleMs || 180);
 const LIGHT_SAMPLE_COUNT = Number(appConfig.lightSampleCount || 4);
 const LIGHT_SAMPLE_INTERVAL_MS = Number(appConfig.lightSampleIntervalMs || 70);
+// Generous ceiling: the first rPPG call may wait out the ~1min model warmup
+// on the server. Without a timeout a dropped tunnel hangs the flow forever.
+const REQUEST_TIMEOUT_MS = Number(appConfig.requestTimeoutMs || 120000);
 
 const FLOW = [
   {
@@ -127,31 +130,38 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function fetchChecked(path, options) {
+  let response;
+  try {
+    response = await fetch(api(path), { ...options, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+  } catch (error) {
+    if (error?.name === "TimeoutError" || error?.name === "AbortError") {
+      logLine(`${path}: no response in ${Math.round(REQUEST_TIMEOUT_MS / 1000)}s — server or tunnel is down`);
+      throw new Error(`No response from ${path} in ${Math.round(REQUEST_TIMEOUT_MS / 1000)}s`);
+    }
+    logLine(`${path}: network error — ${error?.message || error}`);
+    throw error;
+  }
+  if (!response.ok) {
+    const detail = await response.text();
+    logLine(`${path}: HTTP ${response.status}`);
+    throw new Error(`${response.status}: ${detail}`);
+  }
+  return response.json();
+}
+
 async function requestJson(path, options = {}) {
-  const response = await fetch(api(path), {
+  return fetchChecked(path, {
     ...options,
     headers: {
       "Content-Type": "application/json",
       ...(options.headers || {}),
     },
   });
-  if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(`${response.status}: ${detail}`);
-  }
-  return response.json();
 }
 
 async function requestForm(path, form) {
-  const response = await fetch(api(path), {
-    method: "POST",
-    body: form,
-  });
-  if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(`${response.status}: ${detail}`);
-  }
-  return response.json();
+  return fetchChecked(path, { method: "POST", body: form });
 }
 
 function renderStep() {
@@ -197,6 +207,28 @@ function logCheck(name, analysis) {
   const risk = check.risk != null ? ` · risk ${fmt(check.risk)}` : "";
   const reason = check.reason ? ` — ${check.reason}` : "";
   logLine(`${name}: ${analysis.status}${risk}${reason}`);
+}
+
+// Countdown in the stage header while MediaRecorder runs, so a 5-9s silent
+// recording does not read as a frozen page. Returns a stop function.
+function startCountdown(totalMs, label) {
+  const startedAt = performance.now();
+  const render = () => {
+    const left = Math.max(0, totalMs - (performance.now() - startedAt));
+    el.stageValue.textContent = `${label} ${Math.ceil(left / 1000)}s`;
+  };
+  render();
+  const timer = window.setInterval(render, 250);
+  return () => window.clearInterval(timer);
+}
+
+async function recordWithCountdown(durationMs, label) {
+  const stop = startCountdown(durationMs, label);
+  try {
+    return await recordVideoBlob(durationMs);
+  } finally {
+    stop();
+  }
 }
 
 function displayValue(step) {
@@ -520,11 +552,13 @@ function rgbCss(rgb) {
 async function confirmGesture() {
   const gesture = getStep("gesture");
   setStatus("recording gesture");
-  const blob = await recordVideoBlob(gesture.duration_ms || 5000);
+  const blob = await recordWithCountdown(gesture.duration_ms || 5000, "REC");
   const form = new FormData();
   form.append("file", blob, "gesture.webm");
   form.append("expected_action", gesture.payload.expected_action);
   if (state.facePresent !== null) form.append("face_present", String(state.facePresent));
+  el.stageValue.textContent = "analyzing…";
+  setStatus("gesture: analyzing");
   const analysis = await requestForm("/v1/services/gesture/analyze-video", form);
   state.serviceEvidence.gesture = analysis.evidence;
   state.gestureAttempt = analysis.evidence;
@@ -540,11 +574,13 @@ async function confirmGesture() {
 async function samplePulse() {
   setStatus("recording rPPG video");
   try {
-    const blob = await recordVideoBlob(9000);
+    const blob = await recordWithCountdown(9000, "PULSE");
     const form = new FormData();
     form.append("file", blob, "rppg.webm");
     if (state.facePresent !== null) form.append("face_present", String(state.facePresent));
     if (state.faceConfidence !== null) form.append("face_confidence", String(state.faceConfidence));
+    el.stageValue.textContent = "analyzing…";
+    setStatus("pulse: analyzing (first run may take ~1min)");
     const analysis = await requestForm("/v1/services/rppg/analyze-video", form);
     state.serviceEvidence.rppg = analysis.evidence;
     state.pulse = {
@@ -594,8 +630,14 @@ async function recordAudio() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     const started = performance.now();
-    const blob = await recordStreamBlob(stream, audioStep.duration_ms || 4000);
-    stream.getTracks().forEach((track) => track.stop());
+    const stopCountdown = startCountdown(audioStep.duration_ms || 4000, "SPEAK");
+    let blob;
+    try {
+      blob = await recordStreamBlob(stream, audioStep.duration_ms || 4000);
+    } finally {
+      stopCountdown();
+      stream.getTracks().forEach((track) => track.stop());
+    }
     state.audio = {
       duration_seconds: (performance.now() - started) / 1000,
     };
@@ -603,6 +645,8 @@ async function recordAudio() {
     form.append("file", blob, "audio.webm");
     form.append("phrase_expected", audioStep.payload.phrase);
     form.append("phrase_transcribed", el.phraseInput.value || "");
+    el.stageValue.textContent = "analyzing…";
+    setStatus("audio: analyzing");
     const analysis = await requestForm("/v1/services/audio/analyze", form);
     state.serviceEvidence.audio = analysis.evidence;
     state.stepStatus.audio = analysis.status;
@@ -630,7 +674,9 @@ async function recordAudio() {
 async function analyzeClassifier() {
   if (!state.stream) return;
   setStatus("recording classifier clip");
-  const blob = await recordVideoBlob(2500);
+  const blob = await recordWithCountdown(2500, "REC");
+  el.stageValue.textContent = "analyzing…";
+  setStatus("classifier: analyzing");
   const form = new FormData();
   form.append("file", blob, "classifier.webm");
   if (state.facePresent !== null) form.append("face_present", String(state.facePresent));
