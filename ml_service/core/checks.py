@@ -378,8 +378,26 @@ def score_audio(evidence: AudioEvidence | None, challenge: ChallengePlan | None)
             },
         )
 
+    # The transcript comes from server-side ASR. None means the phrase could
+    # not be verified at all — that must not read as a pass; an empty string
+    # is verified silence and scores ratio 0 (fails the phrase).
+    if expected_phrase and evidence.phrase_transcribed is None:
+        return CheckScore(
+            name="audio",
+            status="unknown",
+            risk=0.60,
+            confidence=0.0,
+            weight=0.20,
+            reason="audio phrase transcript is unavailable",
+            details={
+                "expected_phrase": expected_phrase,
+                "ai_probability": evidence.ai_probability,
+                "duration_seconds": evidence.duration_seconds,
+                "detector": evidence.detector,
+            },
+        )
     phrase_ratio = None
-    if expected_phrase and evidence.phrase_transcribed:
+    if expected_phrase:
         phrase_ratio = levenshtein_ratio(expected_phrase, evidence.phrase_transcribed)
     phrase_ok = phrase_ratio is None or phrase_ratio >= 0.78
     ai_risk = evidence.ai_probability

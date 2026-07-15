@@ -10,3 +10,4 @@ __pycache__/
 # reach the container through the compose models/ volume. The small XGB
 # ensemble in models/xgb IS committed.
 models/audio/*.pt
+models/asr/
