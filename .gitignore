@@ -5,3 +5,8 @@ docker-compose.override.yml
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Heavy checkpoints stay out of git (GitHub 100MB cap); deployed via scp and
+# reach the container through the compose models/ volume. The small XGB
+# ensemble in models/xgb IS committed.
+models/audio/*.pt

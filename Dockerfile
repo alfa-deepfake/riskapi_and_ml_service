@@ -11,9 +11,13 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt requirements-ml.txt /tmp/
-RUN pip install --no-cache-dir -r /tmp/requirements.txt -r /tmp/requirements-ml.txt
+# CPU torch wheels for the WavLM audio anti-spoof model; the default PyPI
+# build would drag the full CUDA stack into the image.
+RUN pip install --no-cache-dir "torch>=2.1,<3" "torchaudio>=2.1,<3" --index-url https://download.pytorch.org/whl/cpu \
+    && pip install --no-cache-dir -r /tmp/requirements.txt -r /tmp/requirements-ml.txt
 
 COPY ml_service /app/ml_service
+COPY deepfake_audio /app/deepfake_audio
 
 # The XGBoost video-classifier ensemble (models/xgb, ~20MB CPU models) ships in
 # the image. Heavy classifier models (torch + neiro_model checkpoints) remain
