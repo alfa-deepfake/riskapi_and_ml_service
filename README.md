@@ -91,10 +91,33 @@ The current production code is adapter-based. Heavy models are optional at servi
   built offline from the vendored `wavlm_config`, no HuggingFace download.
 - Audio phrase ASR: `faster-whisper` runs the locally stored CTranslate2
   `Systran/faster-whisper-medium` model. It uses `int8` CPU inference by
-  default; the GPU Compose override uses `float16`. A pinned model revision is
-  downloaded during `docker build` and stored in the image, so serving does
-  not require Hugging Face access. Compose intentionally mounts only
-  `models/audio/`, so the external WavLM checkpoint cannot mask the ASR model.
+  default; the GPU Compose override uses `float16`.
+
+### Runtime model directory
+
+Model weights are not part of the Docker image. Before starting Compose, put
+them in these host paths (all are mounted read-only):
+
+- `models/xgb/`: `feature_names.txt` plus all six `xgb_*.ubj` boosters;
+- `models/audio/wavlm_all4_best.pt`: WavLM anti-spoof checkpoint;
+- `models/asr/faster-whisper-medium/`: local CTranslate2 Faster-Whisper model
+  (`model.bin`, `config.json`, `tokenizer.json`, `vocabulary.txt`);
+- `models/insightface/models/buffalo_l/`: the InsightFace `buffalo_l` model
+  pack required by `train/face_crop.py` for the aligned 512×512 face crop.
+
+The rPPG weights are packaged by the `open-rppg` dependency. The optional CLIP
+fallback, if used instead of XGB, also remains external at
+`models/video/clip_vit_b16_deepfake_best.pt`.
+
+From the repository root, download the ASR and alignment models into those
+directories with:
+
+```bash
+bash scripts/download_runtime_models.sh
+```
+
+Sources: [Systran Faster-Whisper medium](https://huggingface.co/Systran/faster-whisper-medium)
+and [InsightFace buffalo_l v0.7](https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip).
 - rPPG: the `open-rppg` package (FacePhys model) processes the uploaded pulse
   clip; the model is warmed in a background thread at startup because it takes
   ~1 minute to build. Detector name: `open-rppg-facephys`.
