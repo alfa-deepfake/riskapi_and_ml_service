@@ -186,6 +186,19 @@ function metricText(status, parts) {
   return extras ? `${status} · ${extras}` : status;
 }
 
+function logLine(text) {
+  const stamp = new Date().toLocaleTimeString();
+  el.scoreJson.textContent += `[${stamp}] ${text}\n`;
+  el.scoreJson.scrollTop = el.scoreJson.scrollHeight;
+}
+
+function logCheck(name, analysis) {
+  const check = analysis.check || {};
+  const risk = check.risk != null ? ` · risk ${fmt(check.risk)}` : "";
+  const reason = check.reason ? ` — ${check.reason}` : "";
+  logLine(`${name}: ${analysis.status}${risk}${reason}`);
+}
+
 function displayValue(step) {
   if (step.id === "gesture" && state.session) {
     return getStep("gesture").prompt;
@@ -259,7 +272,7 @@ function resetEvidence() {
   el.decision.textContent = "not scored";
   el.riskLine.textContent = "";
   el.checksBreakdown.innerHTML = "";
-  el.scoreJson.textContent = "{}";
+  el.scoreJson.textContent = "";
   el.stage.style.backgroundColor = "#202020";
   renderFaceState();
 }
@@ -338,6 +351,7 @@ async function startCamera() {
   renderFaceState();
   startFaceWatch();
   startPulseCollection();
+  logLine(`camera: stream started (${el.camera.videoWidth}x${el.camera.videoHeight})`);
   setStatus("camera ready");
 }
 
@@ -426,6 +440,7 @@ async function runLight() {
   el.lightMetric.textContent = metricText(analysis.status, [
     analysis.check ? `risk ${fmt(analysis.check.risk)}` : "",
   ]);
+  logCheck("active_light", analysis);
   setStatus("light captured");
 }
 
@@ -479,6 +494,7 @@ async function runFaceFlashLight(pairs) {
     analysis.evidence.verifier_score != null ? `score ${fmt(analysis.evidence.verifier_score)}` : "",
     analysis.evidence.pair_count != null ? `${analysis.evidence.pair_count} pairs` : "",
   ]);
+  logCheck("active_light", analysis);
   setStatus(`light ${analysis.status}`);
 }
 
@@ -517,6 +533,7 @@ async function confirmGesture() {
   el.gestureMetric.textContent = metricText(analysis.status, [
     analysis.evidence.observed_action ? `saw: ${analysis.evidence.observed_action}` : "no action seen",
   ]);
+  logCheck("gesture", analysis);
   setStatus(`gesture ${analysis.status}`);
 }
 
@@ -539,9 +556,11 @@ async function samplePulse() {
       analysis.evidence.bpm != null ? `${Math.round(analysis.evidence.bpm)} bpm` : "no pulse signal",
       analysis.evidence.signal_quality != null ? `SQI ${fmt(analysis.evidence.signal_quality)}` : "",
     ]);
+    logCheck("rppg", analysis);
     setStatus(`pulse ${analysis.status}`);
     return;
   } catch (_error) {
+    logLine("rppg: video upload failed, falling back to luma samples");
     setStatus("rPPG video failed, using samples");
   }
 
@@ -563,6 +582,7 @@ async function samplePulse() {
   state.serviceEvidence.rppg = analysis.evidence;
   state.stepStatus.rppg = analysis.status;
   el.pulseMetric.textContent = analysis.status;
+  logCheck("rppg", analysis);
   setStatus("pulse sampled");
 }
 
@@ -590,6 +610,7 @@ async function recordAudio() {
       analysis.evidence.ai_probability != null ? `AI ${fmt(analysis.evidence.ai_probability)}` : "model n/a",
       analysis.evidence.duration_seconds != null ? `${fmt(analysis.evidence.duration_seconds, 1)}s` : "",
     ]);
+    logCheck("audio", analysis);
   } catch (_error) {
     state.audio = { duration_seconds: 3.0 };
     state.serviceEvidence.audio = {
@@ -600,6 +621,7 @@ async function recordAudio() {
     };
     state.stepStatus.audio = "unknown";
     el.audioMetric.textContent = "unknown";
+    logLine("audio: browser recording failed");
   }
 
   setStatus("audio captured");
@@ -616,6 +638,7 @@ async function analyzeClassifier() {
   const analysis = await requestForm("/v1/services/classifier/analyze-video", form);
   state.serviceEvidence.classifier = analysis.evidence;
   el.classifierMetric.textContent = classifierSummary(analysis);
+  logCheck("classifier", analysis);
   setStatus(`classifier ${analysis.status}`);
 }
 
@@ -702,7 +725,9 @@ async function submitEvidence() {
   el.decision.textContent = result.decision;
   el.riskLine.textContent = `risk ${fmt(result.risk_score)} · confidence ${fmt(result.confidence)}`;
   renderChecksBreakdown(result);
-  el.scoreJson.textContent = JSON.stringify(result, null, 2);
+  logLine(`score: ${result.decision} (risk ${fmt(result.risk_score)})`);
+  el.scoreJson.textContent += `\n${JSON.stringify(result, null, 2)}\n`;
+  el.scoreJson.scrollTop = el.scoreJson.scrollHeight;
   setStatus("scored");
 }
 
@@ -732,6 +757,7 @@ function renderChecksBreakdown(result) {
 
 function applySkipEvidence(id) {
   state.stepStatus[id] = "skipped";
+  logLine(`${id}: skipped (test mode)`);
   if (id === "camera") return;
   if (id === "active_light") {
     const step = getStep("active_light");
