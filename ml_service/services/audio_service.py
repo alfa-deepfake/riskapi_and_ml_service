@@ -67,9 +67,33 @@ def _run_asr(audio_path: Path) -> str | None:
         return None
     try:
         from ml_service.adapters.asr_adapter import WhisperAsrAdapter
-        return WhisperAsrAdapter(model_path=model_path).transcribe(audio_path)
+        return WhisperAsrAdapter(
+            model_path=model_path,
+            device=settings.asr_device,
+            compute_type=settings.asr_compute_type,
+            cpu_threads=settings.asr_cpu_threads,
+        ).transcribe(audio_path)
     except Exception:
         return None
+
+
+def warm_asr_model() -> None:
+    """Load the local ASR model before the first verification request."""
+    model_path = Path(settings.asr_model_path)
+    if not model_path.exists():
+        return
+    try:
+        from ml_service.adapters.asr_adapter import _load_model
+        _load_model(
+            str(model_path),
+            settings.asr_device,
+            settings.asr_compute_type,
+            settings.asr_cpu_threads,
+        )
+    except Exception:
+        # The request path turns an unavailable ASR model into an explicit
+        # unverified result; startup must remain available for other checks.
+        return
 
 
 def _probe_duration(audio_path: Path) -> float | None:

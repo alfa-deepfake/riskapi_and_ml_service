@@ -6,6 +6,8 @@ services:
   ml-service:
     environment:
       ML_VIDEO_DEVICE: auto
+      ML_ASR_DEVICE: cuda
+      ML_ASR_COMPUTE_TYPE: float16
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
     gpus: all

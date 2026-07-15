@@ -86,10 +86,12 @@ The current production code is adapter-based. Heavy models are optional at servi
   `models/audio/wavlm_all4_best.pt`). The checkpoint is git-ignored (380MB) and
   reaches the container through the compose `./models/audio` volume; the encoder is
   built offline from the vendored `wavlm_config`, no HuggingFace download.
-- Audio phrase ASR: the local `models/asr/whisper-tiny.en/` snapshot is
-  git-ignored (~148MB) and copied into the ML image at build time. Put it in
-  place before `docker compose up --build`; Compose intentionally mounts only
-  `models/audio/` so the external WavLM checkpoint cannot mask the ASR model.
+- Audio phrase ASR: `faster-whisper` runs the locally stored CTranslate2
+  `Systran/faster-whisper-medium` model. It uses `int8` CPU inference by
+  default; the GPU Compose override uses `float16`. A pinned model revision is
+  downloaded during `docker build` and stored in the image, so serving does
+  not require Hugging Face access. Compose intentionally mounts only
+  `models/audio/`, so the external WavLM checkpoint cannot mask the ASR model.
 - rPPG: the `open-rppg` package (FacePhys model) processes the uploaded pulse
   clip; the model is warmed in a background thread at startup because it takes
   ~1 minute to build. Detector name: `open-rppg-facephys`.

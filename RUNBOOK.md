@@ -190,6 +190,6 @@ docker compose up -d
 | Порт занят при `up` | См. раздел 4. |
 | Пересобрал ml_service, а изменений нет | `docker compose up -d --build ml-service` (без `--build` образ не пересобирается). |
 | Аудио-чек отдаёт «model is not configured» | Чекпоинт WavLM не в git (380MB): скопировать на хост `scp .../best.pt <host>:.../riskapi_and_ml_service/models/audio/wavlm_all4_best.pt` — компоуз монтирует `./models/audio` в контейнер, достаточно рестарта без пересборки. |
-| Аудио-чек = «phrase transcript is unavailable» | Whisper-снапшот должен быть на машине **до сборки** в `models/asr/whisper-tiny.en/` (~148MB, не в git): скопировать его на хост и выполнить `docker compose up -d --build ml-service`. Он встраивается в образ; Compose монтирует только внешний WavLM-чекпоинт. |
+| Аудио-чек = «phrase transcript is unavailable» | Образ собран до перехода на Faster-Whisper или его сборка не смогла скачать модель: проверьте доступ Docker к `huggingface.co`, затем выполните `docker compose up -d --build ml-service`. Снапшот `faster-whisper-medium` загружается и фиксируется в образе на этапе build; в рантайме сеть не нужна. |
 | Первый запрос пульса долгий | Модель open-rppg строится ~1 мин; она греется в фоне при старте контейнера — дать сервису минуту после `up`. |
 | Нужен GPU/тяжёлые модели | Базовый образ работает без них (адаптеры отдают «unavailable»). Для инференса моделей — доукомплектовать образ torch + чекпоинтами `neiro_model/`, см. комментарий в `Dockerfile` и `docker-compose.gpu.yml`. |

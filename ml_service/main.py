@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from ml_service.api.routes import router
 from ml_service.config import settings
+from ml_service.services.audio_service import warm_asr_model
 from ml_service.services.rppg_service import warm_rppg_model
 
 
@@ -16,6 +17,9 @@ async def _lifespan(_app: FastAPI):
     # The rPPG model takes ~1min to build; warm it so the first pulse
     # request does not stall. No-op when the runtime is not installed.
     threading.Thread(target=warm_rppg_model, daemon=True).start()
+    # Faster-Whisper medium is loaded once in the background so the first
+    # phrase challenge only pays transcription latency.
+    threading.Thread(target=warm_asr_model, daemon=True).start()
     yield
 
 

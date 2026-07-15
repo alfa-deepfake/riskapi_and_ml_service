@@ -1,5 +1,8 @@
 FROM python:3.12-slim
 
+ARG ASR_MODEL_REPOSITORY=Systran/faster-whisper-medium
+ARG ASR_MODEL_REVISION=08e178d48790749d25932bbc082711ddcfdfbc4f
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app
@@ -16,15 +19,19 @@ COPY requirements.txt requirements-ml.txt /tmp/
 RUN pip install --no-cache-dir "torch>=2.1,<3" "torchaudio>=2.1,<3" --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir -r /tmp/requirements.txt -r /tmp/requirements-ml.txt
 
+# Fetch a pinned CTranslate2 model while building. This layer is reused while
+# the dependency layer and model revision stay unchanged; requests never need
+# external network access after the image has been built.
+RUN python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='${ASR_MODEL_REPOSITORY}', revision='${ASR_MODEL_REVISION}', local_dir='/app/models/asr/faster-whisper-medium')" \
+    && rm -rf /app/models/asr/faster-whisper-medium/.cache
+
 COPY ml_service /app/ml_service
 COPY deepfake_audio /app/deepfake_audio
 COPY face_flashing /app/face_flashing
 
-# The XGBoost ensemble and the Whisper ASR snapshot are runtime dependencies of
-# the CPU image. Keep them in separate COPY layers: compose mounts only the
-# optional WavLM checkpoint below, so it cannot hide the server-side ASR model.
+# The XGBoost ensemble is a runtime dependency of the CPU image. The pinned
+# Faster-Whisper model above is already stored under /app/models/asr/.
 COPY models/xgb /app/models/xgb
-COPY models/asr/whisper-tiny.en /app/models/asr/whisper-tiny.en
 
 # Heavy classifier models (the WavLM checkpoint and neiro_model checkpoints)
 # remain external to the image. WavLM is mounted by compose; full GPU images

@@ -1,9 +1,9 @@
-"""Whisper ASR adapter for verifying the spoken challenge phrase.
+"""Low-latency Faster-Whisper ASR for verifying the spoken challenge phrase.
 
-Uses the transformers pipeline (torch + transformers already ship in the
-image) with a local snapshot of whisper-tiny.en — no HuggingFace download at
-runtime. A quiet clip is short-circuited to an empty transcript: whisper
-hallucinates words on silence, and silence must fail the phrase check.
+The local CTranslate2 ``faster-whisper-medium`` model is loaded once per
+process. It never downloads a model during a verification request. A quiet
+clip is short-circuited to an empty transcript: Whisper hallucinates words on
+silence, and silence must fail the phrase check.
 """
 from __future__ import annotations
 
@@ -19,8 +19,11 @@ _ASR_LOCK = threading.Lock()
 
 
 class WhisperAsrAdapter:
-    def __init__(self, *, model_path: Path) -> None:
+    def __init__(self, *, model_path: Path, device: str = "cpu", compute_type: str = "int8", cpu_threads: int = 4) -> None:
         self.model_path = model_path
+        self.device = device
+        self.compute_type = compute_type
+        self.cpu_threads = cpu_threads
 
     def transcribe(self, audio_path: Path) -> str:
         import numpy as np
@@ -31,21 +34,38 @@ class WhisperAsrAdapter:
         wav_path = _as_soundfile_input(audio_path, 16_000)
         try:
             samples, rate = sf.read(wav_path, dtype="float32", always_2d=True)
+            mono = samples.mean(axis=1)
+            if not len(mono) or float(np.sqrt(np.mean(mono**2))) < SILENCE_RMS:
+                return ""
+
+            model = _load_model(str(self.model_path), self.device, self.compute_type, self.cpu_threads)
+            with _ASR_LOCK:
+                segments, _ = model.transcribe(
+                    str(wav_path),
+                    beam_size=1,
+                    best_of=1,
+                    language="en",
+                    task="transcribe",
+                    condition_on_previous_text=False,
+                    without_timestamps=True,
+                )
+                # ``segments`` is a generator; consume it under the lock so a
+                # concurrent request cannot run inference through the same model.
+                return " ".join(segment.text.strip() for segment in segments).strip()
         finally:
             if wav_path != audio_path:
                 wav_path.unlink(missing_ok=True)
-        mono = samples.mean(axis=1)
-        if not len(mono) or float(np.sqrt(np.mean(mono**2))) < SILENCE_RMS:
-            return ""
-
-        pipe = _load_pipeline(str(self.model_path))
-        with _ASR_LOCK:
-            result = pipe({"array": mono, "sampling_rate": rate})
-        return str(result.get("text", "")).strip()
 
 
 @lru_cache(maxsize=1)
-def _load_pipeline(model_path: str):
-    from transformers import pipeline
+def _load_model(model_path: str, device: str, compute_type: str, cpu_threads: int):
+    from faster_whisper import WhisperModel
 
-    return pipeline("automatic-speech-recognition", model=model_path, device="cpu")
+    return WhisperModel(
+        model_path,
+        device=device,
+        compute_type=compute_type,
+        cpu_threads=cpu_threads,
+        num_workers=1,
+        local_files_only=True,
+    )
