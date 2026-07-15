@@ -72,7 +72,15 @@ Current MVP limitations:
 
 The current production code is adapter-based. Heavy models are optional at service boot:
 
-- Video classifier adapter is designed to use `neiro_model/video_infer.py` checkpoints.
+- Video classifier: primary path is the XGBoost forensic ensemble in `models/xgb/`
+  (6 models from the training repo's `infer.py`: one in-distribution + five
+  leave-one-generator-out). Per model, frame scores are averaged; the per-model
+  scores are then averaged with a lone-dissenter rule — if exactly one model
+  votes on the opposite side of the threshold from all the others, it is
+  ignored. Fake/not-fake threshold is `ML_VIDEO_XGB_THRESHOLD` (default 0.45);
+  models dir is `ML_VIDEO_XGB_MODELS_DIR` (default `models/xgb`). When the
+  ensemble is absent, the adapter falls back to `neiro_model/video_infer.py`
+  CLIP checkpoints.
 - Audio classifier adapter is designed to use `neiro_model/audio/infer.py`.
 - Active light, rPPG, gesture, and audio challenge checks have deterministic scoring logic that works from frontend telemetry.
 
