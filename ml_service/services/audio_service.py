@@ -23,17 +23,20 @@ class AudioService:
         phrase_expected: str | None,
         phrase_transcribed: str | None,
     ) -> ServiceAnalyzeResponse:
+        # phrase_transcribed from the client is accepted for API compatibility
+        # but never trusted: the transcript is produced by server-side ASR.
         suffix = Path(file.filename or "audio.webm").suffix or ".webm"
         with NamedTemporaryFile(suffix=suffix, delete=True) as tmp:
             tmp.write(await read_upload(file))
             tmp.flush()
             duration = await run_in_threadpool(_probe_duration, Path(tmp.name))
             result, error_message = await run_in_threadpool(_run_audio_model, Path(tmp.name))
+            transcript = await run_in_threadpool(_run_asr, Path(tmp.name))
 
         ai_probability = result.get("ai_probability") if result else None
         evidence = AudioEvidence(
             phrase_expected=phrase_expected,
-            phrase_transcribed=phrase_transcribed,
+            phrase_transcribed=transcript,
             ai_probability=ai_probability,
             duration_seconds=duration,
             detector=(result or {}).get("detector") if ai_probability is not None else "unavailable",
@@ -55,6 +58,18 @@ def _run_audio_model(audio_path: Path) -> tuple[dict | None, str]:
     except Exception as exc:
         return None, f"audio anti-spoof inference failed: {type(exc).__name__}"
     return result, ""
+
+
+def _run_asr(audio_path: Path) -> str | None:
+    """Server-side transcript; None when ASR cannot run (scored as unverified)."""
+    model_path = Path(settings.asr_model_path)
+    if not model_path.exists():
+        return None
+    try:
+        from ml_service.adapters.asr_adapter import WhisperAsrAdapter
+        return WhisperAsrAdapter(model_path=model_path).transcribe(audio_path)
+    except Exception:
+        return None
 
 
 def _probe_duration(audio_path: Path) -> float | None:

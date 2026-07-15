@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     rppg_min_signal_quality: float = Field(default=0.35, alias="ML_RPPG_MIN_SIGNAL_QUALITY")
 
     audio_model_path: str = Field(default="models/audio/wavlm_all4_best.pt", alias="ML_AUDIO_MODEL_PATH")
+    asr_model_path: str = Field(default="models/asr/whisper-tiny.en", alias="ML_ASR_MODEL_PATH")
     video_clip_checkpoint_path: str = Field(
         default="models/video/clip_vit_b16_deepfake_best.pt",
         alias="ML_VIDEO_CLIP_CHECKPOINT_PATH",
