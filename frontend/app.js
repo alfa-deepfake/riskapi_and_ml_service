@@ -243,7 +243,7 @@ function displayValue(step) {
 
 function displayHint(step) {
   if (step.id === "audio") {
-    return "Browser records audio for duration metadata; transcript can be edited for test flow.";
+    return "Say the phrase out loud — the server transcribes and verifies it.";
   }
   return step.hint;
 }
@@ -321,7 +321,7 @@ el.startVerification.addEventListener("click", async () => {
         scenario: "frontend_sequential_challenge",
       }),
     });
-    el.phraseInput.value = getStep("audio_phrase").payload.phrase;
+    el.phraseInput.value = "";
     el.gestureMetric.textContent = getStep("gesture").payload.expected_action;
     setStatus("session ready");
     renderStep();
@@ -644,22 +644,24 @@ async function recordAudio() {
     const form = new FormData();
     form.append("file", blob, "audio.webm");
     form.append("phrase_expected", audioStep.payload.phrase);
-    form.append("phrase_transcribed", el.phraseInput.value || "");
     el.stageValue.textContent = "analyzing…";
     setStatus("audio: analyzing");
     const analysis = await requestForm("/v1/services/audio/analyze", form);
     state.serviceEvidence.audio = analysis.evidence;
     state.stepStatus.audio = analysis.status;
+    el.phraseInput.value = analysis.evidence.phrase_transcribed ?? "(no transcript)";
     el.audioMetric.textContent = metricText(analysis.status, [
       analysis.evidence.ai_probability != null ? `AI ${fmt(analysis.evidence.ai_probability)}` : "model n/a",
       analysis.evidence.duration_seconds != null ? `${fmt(analysis.evidence.duration_seconds, 1)}s` : "",
     ]);
     logCheck("audio", analysis);
+    if (analysis.evidence.phrase_transcribed != null) {
+      logLine(`audio: server heard "${analysis.evidence.phrase_transcribed}"`);
+    }
   } catch (_error) {
     state.audio = { duration_seconds: 3.0 };
     state.serviceEvidence.audio = {
       phrase_expected: audioStep.payload.phrase,
-      phrase_transcribed: el.phraseInput.value || "",
       duration_seconds: 3.0,
       detector: "browser_recording_failed",
     };
@@ -755,7 +757,6 @@ async function submitEvidence() {
       audio: state.serviceEvidence.audio || {
         skipped: state.skipped.has("audio"),
         phrase_expected: audio.payload.phrase,
-        phrase_transcribed: el.phraseInput.value || "",
         duration_seconds: state.audio?.duration_seconds || 0,
       },
     },
