@@ -81,7 +81,14 @@ The current production code is adapter-based. Heavy models are optional at servi
   models dir is `ML_VIDEO_XGB_MODELS_DIR` (default `models/xgb`). When the
   ensemble is absent, the adapter falls back to `neiro_model/video_infer.py`
   CLIP checkpoints.
-- Audio classifier adapter is designed to use `neiro_model/audio/infer.py`.
+- Audio anti-spoof: WavLM classifier (vendored `deepfake_audio/` inference code,
+  4-generator checkpoint at `ML_AUDIO_MODEL_PATH`, default
+  `models/audio/wavlm_all4_best.pt`). The checkpoint is git-ignored (380MB) and
+  reaches the container through the compose `./models` volume; the encoder is
+  built offline from the vendored `wavlm_config`, no HuggingFace download.
+- rPPG: the `open-rppg` package (FacePhys model) processes the uploaded pulse
+  clip; the model is warmed in a background thread at startup because it takes
+  ~1 minute to build. Detector name: `open-rppg-facephys`.
 - Active light, rPPG, gesture, and audio challenge checks have deterministic scoring logic that works from frontend telemetry.
 
 This makes the service deployable before GPU dependencies and final model packaging are stabilized.
