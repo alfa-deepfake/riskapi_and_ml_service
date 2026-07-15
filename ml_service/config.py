@@ -32,6 +32,8 @@ class Settings(BaseSettings):
         alias="ML_VIDEO_CLIP_CHECKPOINT_PATH",
     )
     video_convnext_checkpoint_path: str | None = Field(default=None, alias="ML_VIDEO_CONVNEXT_CHECKPOINT_PATH")
+    video_xgb_models_dir: str = Field(default="models/xgb", alias="ML_VIDEO_XGB_MODELS_DIR")
+    video_xgb_threshold: float = Field(default=0.45, ge=0.0, le=1.0, alias="ML_VIDEO_XGB_THRESHOLD")
     video_device: str = Field(default="auto", alias="ML_VIDEO_DEVICE")
     video_max_inferences: int = Field(default=12, alias="ML_VIDEO_MAX_INFERENCES")
     video_infer_every: int = Field(default=5, alias="ML_VIDEO_INFER_EVERY")
