@@ -79,9 +79,14 @@ def _generate_face_flash_pairs(rng: random.Random, *, n_pairs: int = 8) -> list[
     width = 1280
     height = 720
     palette = ((0, 0, 0), (255, 255, 255))
+    backgrounds = [rng.choice(palette) for _ in range(n_pairs)]
+    # All pairs flashing the same direction makes the temporal correlation
+    # degenerate (constant expected sequence) — force both directions in.
+    if len(set(backgrounds)) == 1 and n_pairs > 1:
+        backgrounds[-1] = palette[0] if backgrounds[-1] == palette[1] else palette[1]
     pairs = []
     for pair_index in range(n_pairs):
-        background_rgb = rng.choice(palette)
+        background_rgb = backgrounds[pair_index]
         lighting_rgb = rng.choice([color for color in palette if color != background_rgb])
         stripe_top = 0
         stripe_bottom = height

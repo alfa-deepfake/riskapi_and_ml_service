@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -58,7 +57,6 @@ class ActiveLightService:
 
 
 async def _run_face_flashing_verifier(*, manifest: str, files: list[UploadFile]) -> dict:
-    _ensure_repo_root_on_path()
     try:
         import cv2
         from face_flashing.active_light import ActiveLightLivenessVerifier, LightPair, active_light_result_to_dict
@@ -121,9 +119,3 @@ async def _run_face_flashing_verifier(*, manifest: str, files: list[UploadFile])
         raise RuntimeError("no valid face frame pairs for face_flashing verifier")
     result = await run_in_threadpool(ActiveLightLivenessVerifier().verify, light_pairs)
     return active_light_result_to_dict(result, include_pairs=False)
-
-
-def _ensure_repo_root_on_path() -> None:
-    root = Path(__file__).resolve().parents[3]
-    if str(root) not in sys.path:
-        sys.path.insert(0, str(root))

@@ -18,6 +18,7 @@ RUN pip install --no-cache-dir "torch>=2.1,<3" "torchaudio>=2.1,<3" --index-url 
 
 COPY ml_service /app/ml_service
 COPY deepfake_audio /app/deepfake_audio
+COPY face_flashing /app/face_flashing
 
 # The XGBoost video-classifier ensemble (models/xgb, ~20MB CPU models) ships in
 # the image. Heavy classifier models (torch + neiro_model checkpoints) remain
