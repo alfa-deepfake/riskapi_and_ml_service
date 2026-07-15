@@ -108,6 +108,7 @@ def test_features_and_models_end_to_end():
     from ml_service.adapters.xgb_video_adapter import MODEL_FILES, _features
 
     feat_names = (MODELS_DIR / "feature_names.txt").read_text().splitlines()
+    assert len(feat_names) == 38
     rng = np.random.default_rng(0)
     crop = (rng.random((512, 512, 3)) * 255).astype(np.uint8)
     feats = _features(crop)

@@ -45,6 +45,9 @@ def score_classifier(evidence: ClassifierEvidence | None) -> CheckScore:
         "frame_count": evidence.frame_count,
         "fake_probability": evidence.fake_probability,
         "threshold": fail_threshold,
+        "feature_count": evidence.feature_count,
+        "preprocessing": evidence.preprocessing,
+        "face_size_px": evidence.face_size_px,
     }
     if evidence.model_scores is not None:
         details["model_scores"] = evidence.model_scores

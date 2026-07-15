@@ -10,3 +10,5 @@ soundfile>=0.12
 scikit-learn>=1.4
 transformers>=4.40
 faster-whisper==1.2.1
+insightface==0.7.3
+onnxruntime>=1.17,<1.28

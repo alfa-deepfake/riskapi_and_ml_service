@@ -1,10 +1,11 @@
 """Frame-level XGBoost forensic-feature ensemble for uploaded challenge video.
 
 Ports the training repo's ``infer.py``: 6 XGBoost models (one in-distribution,
-five leave-one-generator-out) score a face crop on 37 forensic/quality
-features. Per model the score is averaged across sampled frames, then the
-per-model scores are combined with :func:`mean_without_lone_dissenter` — if a
-single model votes against all the others it is ignored.
+five leave-one-generator-out) score an InsightFace-aligned 512x512 face crop
+on 38 forensic/quality features. Per model the score is averaged across
+sampled frames, then the per-model scores are combined with
+:func:`mean_without_lone_dissenter` — if a single model votes against all the
+others it is ignored.
 
 Heavy imports live at module level; the module itself is imported lazily by
 ``classifier_service`` and skipped when ML dependencies are absent.
@@ -16,7 +17,6 @@ from pathlib import Path
 from typing import Any
 
 import cv2
-import mediapipe as mp
 import numpy as np
 import xgboost
 from PIL import Image
@@ -37,10 +37,9 @@ MODEL_FILES = [
 ]
 
 FACE_CROP_SIZE = 512
+FEATURE_COUNT = 38
 FFT_SIZE = 256
 RESIDUAL_SIGMA = 1.2
-CROP_MARGIN = 1.6
-MIN_CROP_SIDE = 32
 
 
 class XgbVideoEnsembleAdapter:
@@ -67,27 +66,27 @@ class XgbVideoEnsembleAdapter:
         frame_count = 0
         examined = 0
         rows: list[list[float]] = []
+        face_sizes: list[float] = []
         try:
-            with mp.solutions.face_detection.FaceDetection(
-                model_selection=0, min_detection_confidence=0.5
-            ) as detector:
-                while len(rows) < self.max_inferences:
-                    ok, frame = cap.read()
-                    if not ok:
-                        break
-                    frame_count += 1
-                    if frame_count % self.infer_every != 0:
-                        continue
-                    # Cap the scan so a long face-less upload cannot hold a
-                    # threadpool thread by running detection on every frame.
-                    if examined >= self.max_inferences * 8:
-                        break
-                    examined += 1
-                    crop = _face_crop(frame, detector)
-                    if crop is None:
-                        continue
-                    feats = _features(crop)
-                    rows.append([feats.get(name, float("nan")) for name in feat_names])
+            while len(rows) < self.max_inferences:
+                ok, frame = cap.read()
+                if not ok:
+                    break
+                frame_count += 1
+                if frame_count % self.infer_every != 0:
+                    continue
+                # Cap the scan so a long face-less upload cannot hold a
+                # threadpool thread by running alignment on every frame.
+                if examined >= self.max_inferences * 8:
+                    break
+                examined += 1
+                crop, face_size = _face_crop(frame)
+                if crop is None:
+                    continue
+                feats = _features(crop)
+                rows.append([feats[name] for name in feat_names])
+                if face_size is not None:
+                    face_sizes.append(face_size)
         finally:
             cap.release()
 
@@ -98,6 +97,9 @@ class XgbVideoEnsembleAdapter:
             "face_present": bool(rows),
             "face_confidence": len(rows) / examined if examined else 0.0,
             "sampled_frames": len(rows),
+            "feature_count": len(feat_names),
+            "preprocessing": "insightface-buffalo_l-norm_crop-512",
+            "face_size_px": float(np.median(face_sizes)) if face_sizes else None,
         }
         if not rows:
             result.update({"fake_probability": None, "confidence": 0.0})
@@ -123,50 +125,42 @@ class XgbVideoEnsembleAdapter:
             if not names_path.exists():
                 raise FileNotFoundError(f"Feature names not found: {names_path}")
             feat_names = names_path.read_text().splitlines()
+            if len(feat_names) != FEATURE_COUNT or len(set(feat_names)) != FEATURE_COUNT:
+                raise ValueError(
+                    f"XGBoost feature manifest must contain {FEATURE_COUNT} unique features; got {len(feat_names)}"
+                )
             boosters: dict[str, xgboost.Booster] = {}
+            missing_models: list[str] = []
             for name, filename in MODEL_FILES:
                 path = self.models_dir / filename
                 if not path.exists():
+                    missing_models.append(filename)
                     continue
                 booster = xgboost.Booster()
                 booster.load_model(str(path))
+                if booster.num_features() != len(feat_names):
+                    raise ValueError(
+                        f"{filename} expects {booster.num_features()} features, manifest has {len(feat_names)}"
+                    )
                 boosters[name] = booster
-            if not boosters:
-                raise FileNotFoundError(f"No XGBoost models found in {self.models_dir}")
+            if missing_models:
+                raise FileNotFoundError(f"XGBoost ensemble is incomplete: {', '.join(missing_models)}")
             self._loaded = (boosters, feat_names)
         return self._loaded
 
 
-def _face_crop(frame_bgr: np.ndarray, detector: Any) -> np.ndarray | None:
-    """Largest-face square RGB crop resized to FACE_CROP_SIZE.
+def _face_crop(frame_bgr: np.ndarray) -> tuple[np.ndarray | None, float | None]:
+    """Apply the exact InsightFace alignment used to train the XGBoost models."""
+    from train import face_crop
 
-    ponytail: plain bbox crop with a fixed margin; the training-time aligner
-    (train/face_crop.py) is not in this repo. Swap this function for the real
-    aligner when it lands to remove train/serve skew.
-    """
-    rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-    results = detector.process(rgb)
-    if not results.detections:
-        return None
-    box = max(
-        results.detections,
-        key=lambda d: d.location_data.relative_bounding_box.width * d.location_data.relative_bounding_box.height,
-    ).location_data.relative_bounding_box
-    height, width = rgb.shape[:2]
-    center_x = (box.xmin + box.width / 2.0) * width
-    center_y = (box.ymin + box.height / 2.0) * height
-    side = int(round(max(box.width * width, box.height * height) * CROP_MARGIN))
-    side = min(side, width, height)
-    if side < MIN_CROP_SIDE:
-        return None
-    x0 = max(0, min(int(round(center_x - side / 2.0)), width - side))
-    y0 = max(0, min(int(round(center_y - side / 2.0)), height - side))
-    crop = rgb[y0 : y0 + side, x0 : x0 + side]
-    return cv2.resize(crop, (FACE_CROP_SIZE, FACE_CROP_SIZE), interpolation=cv2.INTER_AREA)
+    crop_bgr = face_crop.crop_face_bgr(frame_bgr, size=FACE_CROP_SIZE)
+    if crop_bgr is None:
+        return None, None
+    return cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2RGB), face_crop.last_face_px
 
 
 def _features(crop_rgb: np.ndarray) -> dict[str, float]:
-    """37 forensic + quality features; ported verbatim from infer.py."""
+    """The 38 forensic + quality features expected by the shipped boosters."""
     rgb = np.asarray(crop_rgb, dtype=np.float32) / 255.0
     im_pil = Image.fromarray((rgb * 255).astype(np.uint8))
     feats = _forensic_features(rgb)
