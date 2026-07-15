@@ -45,7 +45,10 @@ class ClassifierEvidence(BaseModel):
     skipped: bool = False
     fake_probability: float | None = Field(default=None, ge=0.0, le=1.0)
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    threshold: float | None = Field(default=None, ge=0.0, le=1.0)
     model_name: str | None = None
+    model_scores: dict[str, float] | None = None
+    dropped_models: list[str] | None = None
     frame_count: int | None = Field(default=None, ge=0)
     face_present: bool | None = None
     face_confidence: float | None = Field(default=None, ge=0.0, le=1.0)

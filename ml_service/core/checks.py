@@ -38,7 +38,17 @@ def score_classifier(evidence: ClassifierEvidence | None) -> CheckScore:
 
     risk = clamp01(evidence.fake_probability)
     confidence = evidence.confidence if evidence.confidence is not None else max(risk, 1.0 - risk)
-    status = "failed" if risk >= 0.70 else "passed"
+    fail_threshold = evidence.threshold if evidence.threshold is not None else 0.70
+    status = "failed" if risk >= fail_threshold else "passed"
+    details = {
+        "model_name": evidence.model_name,
+        "frame_count": evidence.frame_count,
+        "fake_probability": evidence.fake_probability,
+        "threshold": fail_threshold,
+    }
+    if evidence.model_scores is not None:
+        details["model_scores"] = evidence.model_scores
+        details["dropped_models"] = evidence.dropped_models
     return CheckScore(
         name="classifier",
         status=status,
@@ -46,11 +56,7 @@ def score_classifier(evidence: ClassifierEvidence | None) -> CheckScore:
         confidence=clamp01(confidence),
         weight=0.25,
         reason="deepfake classifier probability evaluated",
-        details={
-            "model_name": evidence.model_name,
-            "frame_count": evidence.frame_count,
-            "fake_probability": evidence.fake_probability,
-        },
+        details=details,
     )
 
 
