@@ -28,14 +28,15 @@ class AudioService:
             tmp.write(await read_upload(file))
             tmp.flush()
             duration = await run_in_threadpool(_probe_duration, Path(tmp.name))
-            ai_probability, error_message = await run_in_threadpool(_run_audio_model, Path(tmp.name))
+            result, error_message = await run_in_threadpool(_run_audio_model, Path(tmp.name))
 
+        ai_probability = result.get("ai_probability") if result else None
         evidence = AudioEvidence(
             phrase_expected=phrase_expected,
             phrase_transcribed=phrase_transcribed,
             ai_probability=ai_probability,
             duration_seconds=duration,
-            detector="audio-cnn" if ai_probability is not None else "unavailable",
+            detector=(result or {}).get("detector") if ai_probability is not None else "unavailable",
         )
         if ai_probability is None:
             check = unavailable_check("audio", 0.20, error_message)
@@ -44,7 +45,7 @@ class AudioService:
         return service_response(self.name, evidence, check)
 
 
-def _run_audio_model(audio_path: Path) -> tuple[float | None, str]:
+def _run_audio_model(audio_path: Path) -> tuple[dict | None, str]:
     model_path = Path(settings.audio_model_path)
     if not model_path.exists():
         return None, "audio anti-spoof model is not configured"
@@ -53,7 +54,7 @@ def _run_audio_model(audio_path: Path) -> tuple[float | None, str]:
         result = AudioModelAdapter(model_path=model_path).predict(audio_path)
     except Exception as exc:
         return None, f"audio anti-spoof inference failed: {type(exc).__name__}"
-    return result.get("ai_probability"), ""
+    return result, ""
 
 
 def _probe_duration(audio_path: Path) -> float | None:

@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     active_light_min_color_cosine: float = Field(default=0.15, alias="ML_ACTIVE_LIGHT_MIN_COLOR_COSINE")
     rppg_min_signal_quality: float = Field(default=0.35, alias="ML_RPPG_MIN_SIGNAL_QUALITY")
 
-    audio_model_path: str = Field(default="models/audio/cnn_model.pt", alias="ML_AUDIO_MODEL_PATH")
+    audio_model_path: str = Field(default="models/audio/wavlm_all4_best.pt", alias="ML_AUDIO_MODEL_PATH")
     video_clip_checkpoint_path: str = Field(
         default="models/video/clip_vit_b16_deepfake_best.pt",
         alias="ML_VIDEO_CLIP_CHECKPOINT_PATH",
