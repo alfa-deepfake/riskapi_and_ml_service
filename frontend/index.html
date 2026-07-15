@@ -38,6 +38,10 @@
           <section class="panel challenge-panel">
             <div class="challenge-stage" id="challengeStage">
               <video id="camera" autoplay muted playsinline></video>
+              <div class="face-guide" id="faceGuide" aria-hidden="true">
+                <div class="face-oval" id="faceOval"></div>
+                <p class="guide-hint" id="guideHint">Align your face with the oval</p>
+              </div>
               <div class="stage-overlay">
                 <p id="currentStep">Create a session to start</p>
                 <strong id="stageValue">--</strong>
@@ -62,8 +66,12 @@
               <div class="tool" data-tool="score">Risk score</div>
             </div>
             <div class="metric">
-              <span>Active light samples</span>
-              <b id="lightMetric">0</b>
+              <span>Face in frame</span>
+              <b id="faceMetric">—</b>
+            </div>
+            <div class="metric">
+              <span>Active light</span>
+              <b id="lightMetric">pending</b>
             </div>
             <div class="metric">
               <span>Pulse</span>
@@ -77,6 +85,10 @@
               <span>Audio</span>
               <b id="audioMetric">pending</b>
             </div>
+            <div class="metric">
+              <span>Video classifier</span>
+              <b id="classifierMetric">pending</b>
+            </div>
             <label>
               Recognized phrase
               <input id="phraseInput" placeholder="phrase from challenge" />
@@ -86,7 +98,12 @@
           <section class="panel result">
             <h2>Decision</h2>
             <div class="decision" id="decision">not scored</div>
-            <pre id="scoreJson">{}</pre>
+            <div class="risk-line" id="riskLine"></div>
+            <div class="checks" id="checksBreakdown"></div>
+            <details class="raw-json">
+              <summary>raw JSON</summary>
+              <pre id="scoreJson">{}</pre>
+            </details>
           </section>
         </div>
       </section>

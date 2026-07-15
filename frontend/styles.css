@@ -160,25 +160,78 @@ button:disabled {
 
 video {
   position: absolute;
-  inset: auto 16px 16px auto;
-  z-index: 2;
-  width: 190px;
-  aspect-ratio: 4 / 3;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
-  border: 2px solid rgba(255, 255, 255, 0.72);
   background: #0b0d0c;
+  /* selfie mirror; MediaRecorder captures the raw stream, not the CSS */
+  transform: scaleX(-1);
+}
+
+.face-guide {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: none;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.face-guide.visible {
+  display: block;
+}
+
+.face-oval {
+  position: absolute;
+  top: 12%;
+  left: 50%;
+  width: min(52%, 320px);
+  height: 68%;
+  transform: translateX(-50%);
+  border: 3px dashed rgba(255, 255, 255, 0.85);
+  border-radius: 50%;
+  /* everything outside the oval gets dimmed */
+  box-shadow: 0 0 0 2000px rgba(10, 14, 12, 0.42);
+  transition: border-color 300ms ease, box-shadow 300ms ease;
+}
+
+.face-oval.ok {
+  border: 3px solid rgba(96, 214, 160, 0.95);
+}
+
+.face-oval.no-face {
+  border-color: rgba(240, 173, 78, 0.95);
+}
+
+.guide-hint {
+  position: absolute;
+  bottom: 12px;
+  left: 0;
+  right: 0;
+  margin: 0;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 14px;
+  font-weight: 700;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.6);
 }
 
 .stage-overlay {
   position: absolute;
   inset: 0;
+  z-index: 3;
   display: grid;
-  place-content: center;
-  gap: 12px;
-  padding: 24px;
+  align-content: start;
+  justify-items: center;
+  gap: 6px;
+  padding: 18px 24px;
   text-align: center;
   color: white;
-  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.45);
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.65);
+  background: linear-gradient(to bottom, rgba(10, 14, 12, 0.55), transparent 38%);
+  pointer-events: none;
 }
 
 .stage-overlay p {
@@ -188,7 +241,7 @@ video {
 }
 
 .stage-overlay strong {
-  font-size: 64px;
+  font-size: 44px;
   line-height: 1;
 }
 
@@ -313,10 +366,86 @@ video {
   color: var(--red);
 }
 
+.risk-line {
+  min-height: 18px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.checks {
+  display: grid;
+  gap: 6px;
+}
+
+.check-row {
+  display: grid;
+  grid-template-columns: 92px 64px 1fr 38px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.check-name {
+  color: var(--ink);
+}
+
+.check-status {
+  text-transform: uppercase;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.check-row.passed .check-status {
+  color: var(--green);
+}
+
+.check-row.failed .check-status {
+  color: var(--red);
+}
+
+.check-row.unknown .check-status,
+.check-row.skipped .check-status {
+  color: var(--amber);
+}
+
+.check-riskbar {
+  height: 8px;
+  border-radius: 4px;
+  background: #e6ddc9;
+  overflow: hidden;
+}
+
+.check-riskbar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--green), var(--amber) 55%, var(--red));
+}
+
+.check-risk {
+  text-align: right;
+  color: var(--muted);
+}
+
+.factors {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.raw-json summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 pre {
   overflow: auto;
   max-height: 340px;
-  margin: 0;
+  margin: 8px 0 0;
   border-radius: 8px;
   background: #18211e;
   color: #eef6ed;

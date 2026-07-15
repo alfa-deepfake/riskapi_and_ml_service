@@ -9,28 +9,28 @@ const FLOW = [
     id: "camera",
     title: "Camera check",
     value: "camera",
-    hint: "Allow camera access. The stream is used by light and pulse checks.",
+    hint: "Allow camera access and align your face with the oval guide.",
     action: "Start camera",
   },
   {
     id: "active_light",
     title: "Active light challenge",
     value: "black / white",
-    hint: "Keep your face in frame while the screen flashes black and white.",
+    hint: "Keep your face inside the oval while the screen flashes black and white.",
     action: "Run flashes",
   },
   {
     id: "gesture",
     title: "Gesture challenge",
     value: "gesture",
-    hint: "Perform the gesture shown by the challenge.",
+    hint: "Perform the gesture shown by the challenge, keeping your face inside the oval.",
     action: "Confirm gesture",
   },
   {
     id: "rppg",
     title: "Pulse check",
     value: "pulse",
-    hint: "Hold still for a short rPPG sampling window.",
+    hint: "Hold still with your face inside the oval for a short rPPG sampling window.",
     action: "Sample pulse",
   },
   {
@@ -53,6 +53,7 @@ const state = {
   session: null,
   stream: null,
   pulseTimer: null,
+  faceTimer: null,
   pulseSamples: [],
   suppressPulseCollection: false,
   facePresent: null,
@@ -82,15 +83,22 @@ const el = {
   stage: document.querySelector("#challengeStage"),
   flashFullscreen: document.querySelector("#flashFullscreen"),
   camera: document.querySelector("#camera"),
+  faceGuide: document.querySelector("#faceGuide"),
+  faceOval: document.querySelector("#faceOval"),
+  guideHint: document.querySelector("#guideHint"),
   currentStep: document.querySelector("#currentStep"),
   stageValue: document.querySelector("#stageValue"),
   stepHint: document.querySelector("#stepHint"),
+  faceMetric: document.querySelector("#faceMetric"),
   lightMetric: document.querySelector("#lightMetric"),
   pulseMetric: document.querySelector("#pulseMetric"),
   gestureMetric: document.querySelector("#gestureMetric"),
   audioMetric: document.querySelector("#audioMetric"),
+  classifierMetric: document.querySelector("#classifierMetric"),
   phraseInput: document.querySelector("#phraseInput"),
   decision: document.querySelector("#decision"),
+  riskLine: document.querySelector("#riskLine"),
+  checksBreakdown: document.querySelector("#checksBreakdown"),
   scoreJson: document.querySelector("#scoreJson"),
 };
 
@@ -162,11 +170,20 @@ function renderStep() {
   // session is consumed, so resubmitting would just 404.
   el.primaryAction.disabled = step.id === "score" && state.scored;
   el.skipStep.disabled = !TEST_SKIP_ENABLED || step.id === "score";
-  el.currentStep.textContent = step.title;
+  el.currentStep.textContent = `Step ${state.stepIndex + 1}/${FLOW.length} — ${step.title}`;
   el.stageValue.textContent = displayValue(step);
   el.stepHint.textContent = displayHint(step);
   el.primaryAction.textContent = step.action;
   updateTools();
+}
+
+function fmt(value, digits = 2) {
+  return typeof value === "number" && Number.isFinite(value) ? value.toFixed(digits) : "—";
+}
+
+function metricText(status, parts) {
+  const extras = parts.filter(Boolean).join(" · ");
+  return extras ? `${status} · ${extras}` : status;
 }
 
 function displayValue(step) {
@@ -233,14 +250,18 @@ function resetEvidence() {
   state.faceConfidence = null;
   state.gestureAttempt = null;
   state.serviceEvidence = {};
-  el.lightMetric.textContent = "0";
+  el.lightMetric.textContent = "pending";
   el.pulseMetric.textContent = "pending";
   el.gestureMetric.textContent = "pending";
   el.audioMetric.textContent = "pending";
+  el.classifierMetric.textContent = "pending";
   el.decision.className = "decision";
   el.decision.textContent = "not scored";
+  el.riskLine.textContent = "";
+  el.checksBreakdown.innerHTML = "";
   el.scoreJson.textContent = "{}";
   el.stage.style.backgroundColor = "#202020";
+  renderFaceState();
 }
 
 el.startVerification.addEventListener("click", async () => {
@@ -312,9 +333,51 @@ async function startCamera() {
   state.stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
   el.camera.srcObject = state.stream;
   await waitForVideo();
+  el.faceGuide.classList.add("visible");
   await updateFacePresence();
+  renderFaceState();
+  startFaceWatch();
   startPulseCollection();
   setStatus("camera ready");
+}
+
+// FaceDetector is available only in some Chromium builds; when it is absent
+// the oval stays neutral and the metric says so instead of guessing.
+function startFaceWatch() {
+  if (state.faceTimer || !("FaceDetector" in window)) {
+    renderFaceState();
+    return;
+  }
+  state.faceTimer = window.setInterval(async () => {
+    if (!state.stream || state.suppressPulseCollection) return;
+    await updateFacePresence();
+    renderFaceState();
+  }, 2000);
+}
+
+function renderFaceState() {
+  el.faceOval.classList.toggle("ok", state.facePresent === true);
+  el.faceOval.classList.toggle("no-face", state.facePresent === false);
+  if (!state.stream) {
+    el.faceMetric.textContent = "—";
+    el.guideHint.textContent = "Align your face with the oval";
+    return;
+  }
+  if (!("FaceDetector" in window)) {
+    el.faceMetric.textContent = "no browser detector";
+    el.guideHint.textContent = "Align your face with the oval";
+    return;
+  }
+  if (state.facePresent === true) {
+    el.faceMetric.textContent = "detected";
+    el.guideHint.textContent = "Face detected — hold this position";
+  } else if (state.facePresent === false) {
+    el.faceMetric.textContent = "not found";
+    el.guideHint.textContent = "Face not found — move into the oval";
+  } else {
+    el.faceMetric.textContent = "—";
+    el.guideHint.textContent = "Align your face with the oval";
+  }
 }
 
 async function runLight() {
@@ -360,7 +423,9 @@ async function runLight() {
   });
   state.serviceEvidence.active_light = analysis.evidence;
   state.stepStatus.active_light = analysis.status;
-  el.lightMetric.textContent = analysis.status;
+  el.lightMetric.textContent = metricText(analysis.status, [
+    analysis.check ? `risk ${fmt(analysis.check.risk)}` : "",
+  ]);
   setStatus("light captured");
 }
 
@@ -410,7 +475,10 @@ async function runFaceFlashLight(pairs) {
   state.stepStatus.active_light = analysis.status;
   state.expectedLuma = pairs.map((pair) => pair.lighting.lighting_rgb?.[0] ?? 255);
   state.observedLuma = new Array(pairs.length).fill(0);
-  el.lightMetric.textContent = analysis.status;
+  el.lightMetric.textContent = metricText(analysis.status, [
+    analysis.evidence.verifier_score != null ? `score ${fmt(analysis.evidence.verifier_score)}` : "",
+    analysis.evidence.pair_count != null ? `${analysis.evidence.pair_count} pairs` : "",
+  ]);
   setStatus(`light ${analysis.status}`);
 }
 
@@ -446,7 +514,9 @@ async function confirmGesture() {
   state.gestureAttempt = analysis.evidence;
   state.gestureDone = analysis.status === "passed";
   state.stepStatus.gesture = analysis.status;
-  el.gestureMetric.textContent = analysis.status;
+  el.gestureMetric.textContent = metricText(analysis.status, [
+    analysis.evidence.observed_action ? `saw: ${analysis.evidence.observed_action}` : "no action seen",
+  ]);
   setStatus(`gesture ${analysis.status}`);
 }
 
@@ -465,7 +535,10 @@ async function samplePulse() {
       signal_quality: analysis.evidence.signal_quality ?? null,
     };
     state.stepStatus.rppg = analysis.status;
-    el.pulseMetric.textContent = analysis.status;
+    el.pulseMetric.textContent = metricText(analysis.status, [
+      analysis.evidence.bpm != null ? `${Math.round(analysis.evidence.bpm)} bpm` : "no pulse signal",
+      analysis.evidence.signal_quality != null ? `SQI ${fmt(analysis.evidence.signal_quality)}` : "",
+    ]);
     setStatus(`pulse ${analysis.status}`);
     return;
   } catch (_error) {
@@ -513,7 +586,10 @@ async function recordAudio() {
     const analysis = await requestForm("/v1/services/audio/analyze", form);
     state.serviceEvidence.audio = analysis.evidence;
     state.stepStatus.audio = analysis.status;
-    el.audioMetric.textContent = analysis.status;
+    el.audioMetric.textContent = metricText(analysis.status, [
+      analysis.evidence.ai_probability != null ? `AI ${fmt(analysis.evidence.ai_probability)}` : "model n/a",
+      analysis.evidence.duration_seconds != null ? `${fmt(analysis.evidence.duration_seconds, 1)}s` : "",
+    ]);
   } catch (_error) {
     state.audio = { duration_seconds: 3.0 };
     state.serviceEvidence.audio = {
@@ -539,7 +615,21 @@ async function analyzeClassifier() {
   if (state.faceConfidence !== null) form.append("face_confidence", String(state.faceConfidence));
   const analysis = await requestForm("/v1/services/classifier/analyze-video", form);
   state.serviceEvidence.classifier = analysis.evidence;
+  el.classifierMetric.textContent = classifierSummary(analysis);
   setStatus(`classifier ${analysis.status}`);
+}
+
+function classifierSummary(analysis) {
+  const evidence = analysis.evidence || {};
+  const parts = [];
+  if (evidence.fake_probability != null) parts.push(`p_fake ${fmt(evidence.fake_probability)}`);
+  if (evidence.model_scores && evidence.threshold != null) {
+    const scores = Object.values(evidence.model_scores);
+    const fakeVotes = scores.filter((score) => score >= evidence.threshold).length;
+    parts.push(`${fakeVotes}/${scores.length} models vote fake`);
+  }
+  if (evidence.dropped_models?.length) parts.push(`ignored: ${evidence.dropped_models.join(", ")}`);
+  return metricText(analysis.status, parts);
 }
 
 async function submitEvidence() {
@@ -552,6 +642,7 @@ async function submitEvidence() {
         face_present: state.facePresent,
         face_confidence: state.faceConfidence,
       };
+      el.classifierMetric.textContent = "unavailable";
     }
   }
   const gesture = getStep("gesture");
@@ -609,8 +700,34 @@ async function submitEvidence() {
   state.scored = true;
   el.decision.className = `decision ${result.decision}`;
   el.decision.textContent = result.decision;
+  el.riskLine.textContent = `risk ${fmt(result.risk_score)} · confidence ${fmt(result.confidence)}`;
+  renderChecksBreakdown(result);
   el.scoreJson.textContent = JSON.stringify(result, null, 2);
   setStatus("scored");
+}
+
+function escapeHtml(value) {
+  const div = document.createElement("div");
+  div.textContent = String(value);
+  return div.innerHTML;
+}
+
+function renderChecksBreakdown(result) {
+  const rows = (result.checks || [])
+    .map((check) => {
+      const width = Math.round(check.risk * 100);
+      return `<div class="check-row ${check.status}" title="${escapeHtml(check.reason)}">
+        <span class="check-name">${escapeHtml(check.name)}</span>
+        <span class="check-status">${escapeHtml(check.status)}</span>
+        <span class="check-riskbar"><i style="width:${width}%"></i></span>
+        <span class="check-risk">${fmt(check.risk)}</span>
+      </div>`;
+    })
+    .join("");
+  const factors = result.factors?.length
+    ? `<p class="factors">${result.factors.map(escapeHtml).join(" · ")}</p>`
+    : "";
+  el.checksBreakdown.innerHTML = rows + factors;
 }
 
 function applySkipEvidence(id) {
