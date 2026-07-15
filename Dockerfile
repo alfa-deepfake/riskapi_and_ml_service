@@ -15,11 +15,13 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt -r /tmp/requirements-ml.
 
 COPY ml_service /app/ml_service
 
-# Heavy classifier models (torch + neiro_model checkpoints) are optional at boot:
-# the audio/video adapters degrade to "unavailable" when the checkpoints are absent
-# (see ml_service/services/*_service.py). This workspace ships the service without
-# them. To build the full GPU model image, install torch and COPY the neiro_model/
-# checkpoints into /app/models before the CMD.
+# The XGBoost video-classifier ensemble (models/xgb, ~20MB CPU models) ships in
+# the image. Heavy classifier models (torch + neiro_model checkpoints) remain
+# optional at boot: the audio/CLIP adapters degrade to "unavailable" when their
+# checkpoints are absent (see ml_service/services/*_service.py). To build the
+# full GPU model image, install torch and COPY the neiro_model/ checkpoints
+# into /app/models before the CMD.
+COPY models /app/models
 
 EXPOSE 8100
 # Sessions/challenges live in process memory (ChallengeStore), so the service
