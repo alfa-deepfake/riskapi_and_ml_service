@@ -9,7 +9,7 @@ from ml_service.main import app
 from ml_service.services import audio_service
 
 AUDIO_MODEL = Path(__file__).resolve().parent.parent / "models" / "audio" / "wavlm_all4_best.pt"
-ASR_MODEL = Path(__file__).resolve().parent.parent / "models" / "asr" / "whisper-tiny.en"
+ASR_MODEL = Path(__file__).resolve().parent.parent / "models" / "asr" / "faster-whisper-medium"
 
 
 async def _post_audio(monkeypatch, *, asr_result, form_extra=None):
@@ -88,11 +88,10 @@ async def test_audio_endpoint_unavailable_without_model(monkeypatch):
     assert body["evidence"]["detector"] == "unavailable"
 
 
-@pytest.mark.skipif(not ASR_MODEL.exists(), reason="Whisper snapshot is not deployed")
-def test_whisper_silence_gate_and_pipeline(tmp_path):
+@pytest.mark.skipif(not ASR_MODEL.exists(), reason="Faster-Whisper model is not deployed")
+def test_faster_whisper_silence_gate_and_pipeline(tmp_path):
     np = pytest.importorskip("numpy")
-    pytest.importorskip("torch")
-    pytest.importorskip("transformers")
+    pytest.importorskip("faster_whisper")
     sf = pytest.importorskip("soundfile")
 
     from ml_service.adapters.asr_adapter import WhisperAsrAdapter

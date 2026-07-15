@@ -6,3 +6,6 @@ __pycache__
 *.pt
 *.zip
 dist
+# Faster-Whisper weights are fetched and pinned in Dockerfile. Do not send a
+# developer's local cache or a partial download as build context.
+models/asr/
