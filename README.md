@@ -84,8 +84,12 @@ The current production code is adapter-based. Heavy models are optional at servi
 - Audio anti-spoof: WavLM classifier (vendored `deepfake_audio/` inference code,
   4-generator checkpoint at `ML_AUDIO_MODEL_PATH`, default
   `models/audio/wavlm_all4_best.pt`). The checkpoint is git-ignored (380MB) and
-  reaches the container through the compose `./models` volume; the encoder is
+  reaches the container through the compose `./models/audio` volume; the encoder is
   built offline from the vendored `wavlm_config`, no HuggingFace download.
+- Audio phrase ASR: the local `models/asr/whisper-tiny.en/` snapshot is
+  git-ignored (~148MB) and copied into the ML image at build time. Put it in
+  place before `docker compose up --build`; Compose intentionally mounts only
+  `models/audio/` so the external WavLM checkpoint cannot mask the ASR model.
 - rPPG: the `open-rppg` package (FacePhys model) processes the uploaded pulse
   clip; the model is warmed in a background thread at startup because it takes
   ~1 minute to build. Detector name: `open-rppg-facephys`.

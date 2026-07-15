@@ -18,11 +18,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    # The audio checkpoint (~380MB, models/audio/*.pt) is too big for git and
-    # is excluded from the image (.dockerignore *.pt) — it reaches the
-    # container through this mount. The XGB ensemble also lives in models/.
+    # The WavLM checkpoint (~380MB, models/audio/*.pt) is too big for git and
+    # is excluded from the image. Mount only that directory: mounting all of
+    # ./models would hide the Whisper ASR snapshot baked into the image.
     volumes:
-      - ./models:/app/models:ro
+      - ./models/audio:/app/models/audio:ro
     environment:
       ML_SERVICE_NAME: alpha-bank-anti-deepfake-ml
       RISK_API_URL: http://risk-api:8000
