@@ -18,11 +18,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    # The WavLM checkpoint (~380MB, models/audio/*.pt) is too big for git and
-    # is excluded from the image. Mount only that directory: mounting all of
-    # ./models would hide the Whisper ASR snapshot baked into the image.
+    # All model weights live on the host, never in the image. The InsightFace
+    # cache uses its standard root so train/face_crop.py loads buffalo_l without
+    # a runtime download.
     volumes:
-      - ./models/audio:/app/models/audio:ro
+      - ./models:/app/models:ro
+      - ./models/insightface:/root/.insightface:ro
     environment:
       ML_SERVICE_NAME: alpha-bank-anti-deepfake-ml
       RISK_API_URL: http://risk-api:8000

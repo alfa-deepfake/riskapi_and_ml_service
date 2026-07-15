@@ -43,6 +43,17 @@ cd /home/master/work/alfa-deepfake/riskapi_and_ml_service
 
 ## 1. Запуск
 
+Перед первым запуском положите веса в `./models`. Для Faster-Whisper medium и
+InsightFace `buffalo_l` из корня репозитория есть готовая команда:
+
+```bash
+bash scripts/download_runtime_models.sh
+```
+
+Она скачивает модели в `models/asr/faster-whisper-medium/` и
+`models/insightface/models/buffalo_l/`. XGB-бустеры и WavLM-чекпоинт
+размещаются в `models/xgb/` и `models/audio/` отдельно.
+
 ```bash
 docker compose up -d --build      # собрать образы и поднять в фоне
 ```
@@ -189,7 +200,7 @@ docker compose up -d
 | `no such service: →` | В команду попал лишний текст. Запускать ровно `docker compose up -d --build`. |
 | Порт занят при `up` | См. раздел 4. |
 | Пересобрал ml_service, а изменений нет | `docker compose up -d --build ml-service` (без `--build` образ не пересобирается). |
-| Аудио-чек отдаёт «model is not configured» | Чекпоинт WavLM не в git (380MB): скопировать на хост `scp .../best.pt <host>:.../riskapi_and_ml_service/models/audio/wavlm_all4_best.pt` — компоуз монтирует `./models/audio` в контейнер, достаточно рестарта без пересборки. |
-| Аудио-чек = «phrase transcript is unavailable» | Образ собран до перехода на Faster-Whisper или его сборка не смогла скачать модель: проверьте доступ Docker к `huggingface.co`, затем выполните `docker compose up -d --build ml-service`. Снапшот `faster-whisper-medium` загружается и фиксируется в образе на этапе build; в рантайме сеть не нужна. |
+| Аудио-чек отдаёт «model is not configured» | Нет `models/audio/wavlm_all4_best.pt` на хосте. Compose монтирует весь `./models` в `/app/models` — скопировать чекпоинт и перезапустить `ml-service`. |
+| Аудио-чек = «phrase transcript is unavailable» | Нет локальной модели `models/asr/faster-whisper-medium/` или каталог неполный. Скопировать CTranslate2-снапшот (`model.bin`, `config.json`, `tokenizer.json`, `vocabulary.txt`) на хост и перезапустить `ml-service`; образ не скачивает модели. |
 | Первый запрос пульса долгий | Модель open-rppg строится ~1 мин; она греется в фоне при старте контейнера — дать сервису минуту после `up`. |
 | Нужен GPU/тяжёлые модели | Базовый образ работает без них (адаптеры отдают «unavailable»). Для инференса моделей — доукомплектовать образ torch + чекпоинтами `neiro_model/`, см. комментарий в `Dockerfile` и `docker-compose.gpu.yml`. |
