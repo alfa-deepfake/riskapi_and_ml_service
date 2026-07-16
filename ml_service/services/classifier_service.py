@@ -66,16 +66,35 @@ def _run_video_model(video_path: Path) -> dict | None:
 def warm_video_model() -> None:
     """Eagerly load the v15 models (~25s of CNN construction on CPU) so the
     first classifier request only pays inference latency. No-op when the
-    models or the ML dependencies are absent."""
-    adapter = _get_v15_adapter()
-    if adapter is not None:
-        adapter.load()
+    models or the ML dependencies are absent; never raises — startup must
+    remain available for the other checks, a broken bundle surfaces
+    per-request instead."""
+    try:
+        adapter = _get_v15_adapter()
+        if adapter is not None:
+            adapter.load()
+    except Exception:
+        pass
+
+
+# The five CNN fold weights are deployed separately from the committed
+# configs/trees (too big for git) — gate on them so a checkout without the
+# weights falls back to CLIP instead of erroring on every request.
+_V15_CNN_WEIGHTS = (
+    "noise_cnn_holdout_deeplivecam.pt",
+    "noise_cnn_holdout_facefusion.pt",
+    "noise_cnn_holdout_visomaster.pt",
+    "noise_cnn_holdout_inswapper128.pt",
+    "noise_cnn_holdout_reswapper.pt",
+)
 
 
 @lru_cache(maxsize=1)
 def _get_v15_adapter():
     models_dir = Path(settings.video_v15_dir)
     if not (models_dir / "v15_blend_config.json").exists():
+        return None
+    if not all((models_dir / "cnn" / name).exists() for name in _V15_CNN_WEIGHTS):
         return None
     try:
         from ml_service.adapters.v15_video_adapter import V15VideoAdapter

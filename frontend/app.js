@@ -467,9 +467,15 @@ function renderFaceState() {
 async function runLight() {
   const step = getStep("active_light");
   // A positively absent face makes the flash dance pointless: skip the
-  // capture and multi-MB upload and let the server fail the check instantly.
+  // capture and upload and let the server fail the check instantly.
   // (facePresent === null means the browser has no FaceDetector — proceed.)
+  // One fastMode sample false-negatives routinely (motion blur, turned
+  // head), so only fast-fail on an absence confirmed across three samples.
   await updateFacePresence();
+  for (let retry = 0; retry < 2 && state.facePresent === false; retry += 1) {
+    await sleep(400);
+    await updateFacePresence();
+  }
   if (state.facePresent === false) {
     const analysis = await requestJson("/v1/services/active-light/analyze", {
       method: "POST",

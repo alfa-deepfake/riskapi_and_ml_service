@@ -22,6 +22,7 @@ from __future__ import annotations
 import io
 import json
 import sys
+import threading
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -76,6 +77,7 @@ class V15VideoAdapter:
         self.max_inferences = max(1, max_inferences)
         self.infer_every = max(1, infer_every)
         self._state: dict[str, Any] | None = None
+        self._load_lock = threading.Lock()
 
     def predict(self, video_path: Path) -> dict[str, Any]:
         st = self.load()
@@ -174,9 +176,19 @@ class V15VideoAdapter:
         return float(st["calibrator"].predict_proba(np.array([[logit]]))[:, 1][0])
 
     def load(self) -> dict[str, Any]:
-        """Load and cache all models (the CNN folds take seconds on CPU)."""
+        """Load and cache all models (the CNN folds take seconds on CPU).
+
+        Locked: the startup warm thread and a first request otherwise both see
+        ``_state is None`` and each build the full ~600MB model set."""
         if self._state is not None:
             return self._state
+        with self._load_lock:
+            if self._state is not None:
+                return self._state
+            self._state = self._build_state()
+        return self._state
+
+    def _build_state(self) -> dict[str, Any]:
         v13_dir = self.models_dir / "v13"
         cnn_dir = self.models_dir / "cnn"
         feat_names = (v13_dir / "feature_names.txt").read_text().splitlines()
@@ -220,14 +232,23 @@ class V15VideoAdapter:
         return self._state
 
 
+_face_lock = threading.Lock()
+
+
 def _face_crop(frame_bgr: np.ndarray) -> tuple[np.ndarray | None, float | None]:
     """Apply the exact InsightFace alignment used to train the v15 models."""
     import face_crop
 
-    crop_bgr = face_crop.crop_face_bgr(frame_bgr, size=FACE_CROP_SIZE)
+    # crop_face_bgr reports the source bbox side via a module-level global
+    # (vendored contract) — serialize the call+read pair so concurrent
+    # requests can't cross-contaminate the value that drives the low_info
+    # verdict gate; this also serializes the lazy FaceAnalysis construction.
+    with _face_lock:
+        crop_bgr = face_crop.crop_face_bgr(frame_bgr, size=FACE_CROP_SIZE)
+        face_px = face_crop.last_face_px
     if crop_bgr is None:
         return None, None
-    return cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2RGB), face_crop.last_face_px
+    return cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2RGB), face_px
 
 
 def _features(crop_rgb: np.ndarray) -> dict[str, float]:

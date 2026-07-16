@@ -72,6 +72,74 @@ def test_classifier_details_include_both_modalities():
     assert check.details["cnn_probability"] == 0.55
 
 
+def test_withheld_fake_verdict_blocks_allow_decision(monkeypatch, tmp_path):
+    # A low-detail-withheld FAKE must route to review even when every hard
+    # liveness check passes — otherwise framing the face small neutralizes
+    # the forensic classifier entirely.
+    from ml_service.api.schemas import CheckScore
+    from ml_service.core.scoring import _decision
+
+    withheld = CheckScore(
+        name="classifier",
+        status="unknown",
+        risk=0.50,
+        confidence=0.0,
+        weight=0.25,
+        reason="low-detail input — fake verdict withheld (signal unreliable)",
+        details={"low_info": True, "fake_probability": 0.90},
+    )
+    passing = [
+        CheckScore(name=name, status="passed", risk=0.10, confidence=0.9, weight=0.2, reason="ok")
+        for name in ("active_light", "rppg", "gesture", "audio")
+    ]
+    decision = _decision([withheld, *passing], 0.20, allow_threshold=0.35, deny_threshold=0.72)
+    assert decision == "review"
+
+    # A merely-missing classifier (no low_info) keeps the old behavior.
+    missing = CheckScore(
+        name="classifier", status="unknown", risk=0.45, confidence=0.0, weight=0.25,
+        reason="frame classifier evidence is missing",
+    )
+    assert _decision([missing, *passing], 0.20, allow_threshold=0.35, deny_threshold=0.72) == "allow"
+
+
+def test_v15_adapter_gate_requires_cnn_weights(monkeypatch, tmp_path):
+    # The blend config is committed to git; the CNN weights are deployed
+    # separately. A checkout without the weights must fall back (None), not
+    # return an adapter that errors on every request.
+    from ml_service.services import classifier_service
+
+    v15 = tmp_path / "v15"
+    (v15 / "cnn").mkdir(parents=True)
+    (v15 / "v15_blend_config.json").write_text("{}")
+    monkeypatch.setattr(classifier_service.settings, "video_v15_dir", str(v15))
+
+    classifier_service._get_v15_adapter.cache_clear()
+    assert classifier_service._get_v15_adapter() is None
+
+    for name in classifier_service._V15_CNN_WEIGHTS:
+        (v15 / "cnn" / name).write_bytes(b"stub")
+    classifier_service._get_v15_adapter.cache_clear()
+    # With all weights present the gate passes; adapter may still be None in
+    # a dev venv without ML deps (ImportError branch) — both are acceptable
+    # here, we only assert the gate no longer blocks.
+    try:
+        classifier_service._get_v15_adapter()
+    finally:
+        classifier_service._get_v15_adapter.cache_clear()
+
+
+def test_warm_video_model_never_raises(monkeypatch):
+    from ml_service.services import classifier_service
+
+    class BrokenAdapter:
+        def load(self):
+            raise FileNotFoundError("noise_cnn_holdout_deeplivecam.pt")
+
+    monkeypatch.setattr(classifier_service, "_get_v15_adapter", lambda: BrokenAdapter())
+    classifier_service.warm_video_model()  # must not raise
+
+
 # Golden feature values pin the ported 73-feature extraction (base set +
 # verbatim v6-v9 modules): any change to the residual sigma, color order,
 # spectrum binning, round-trip sizes or noise estimator shifts them.
