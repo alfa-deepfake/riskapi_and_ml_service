@@ -146,6 +146,84 @@ function checkNameRu(value) {
   return CHECK_NAME_RU[value] || value;
 }
 
+// Gesture action identifiers (expected/observed) from the server, mapped to
+// Russian for display; unknown values fall through unchanged.
+const GESTURE_ACTION_RU = {
+  touch_mouth: "коснитесь губ",
+  touch_nose: "коснитесь носа",
+  not_completed: "не выполнено",
+  none: "нет действия",
+};
+
+function gestureActionRu(value) {
+  return value == null ? value : GESTURE_ACTION_RU[value] || value;
+}
+
+// Video-classifier condition labels from the server, mapped to Russian.
+const CONDITION_RU = {
+  clean: "чисто",
+  degraded: "ухудшено",
+  restored: "восстановлено",
+  vidcall: "видеозвонок",
+  vidcall_ff: "видеозвонок (ff)",
+};
+
+function conditionRu(value) {
+  return CONDITION_RU[value] || value;
+}
+
+// Diagnostic "reason" sentences come from the server in English. They render in
+// the log panel and as tooltips, so map the known ones to Russian; dynamic or
+// unknown messages (e.g. "… inference failed: RuntimeError") fall through.
+const REASON_RU = {
+  "frame classifier cannot pass without a detected face": "классификатор кадров не может пройти без обнаруженного лица",
+  "frame classifier evidence is missing": "данные классификатора кадров отсутствуют",
+  "AI restoration/upscaling detected on the input — rejected": "обнаружено ИИ-восстановление/апскейл входных данных — отклонено",
+  "low-detail input — fake verdict withheld (signal unreliable)": "мало деталей во входных данных — вердикт о подделке отложен (сигнал ненадёжен)",
+  "deepfake classifier probability evaluated": "оценена вероятность дипфейка классификатором",
+  "active light evidence is missing": "данные активного света отсутствуют",
+  "active light cannot pass without a detected face": "активный свет не может пройти без обнаруженного лица",
+  "face flashing frame-pair verifier evaluated": "проверены пары кадров вспышек света",
+  "not enough active light samples": "недостаточно образцов активного света",
+  "active light correlation is undefined": "корреляция активного света не определена",
+  "face luminance response compared with screen challenge": "яркость лица сопоставлена с вспышками экрана",
+  "rPPG evidence is missing": "данные rPPG отсутствуют",
+  "rPPG cannot pass without a detected face ROI": "rPPG не может пройти без обнаруженной области лица",
+  "rPPG raw samples are required": "требуются исходные образцы rPPG",
+  "rPPG sample window is too short": "окно образцов rPPG слишком короткое",
+  "rPPG signal quality is unavailable": "качество сигнала rPPG недоступно",
+  "physiological pulse signal evaluated with sliding-window stability": "физиологический сигнал пульса оценён со стабильностью скользящего окна",
+  "rPPG signal quality is too low": "качество сигнала rPPG слишком низкое",
+  "rPPG model heart-rate and signal-quality output evaluated": "оценены пульс и качество сигнала моделью rPPG",
+  "gesture evidence is missing": "данные жеста отсутствуют",
+  "gesture requires a real detector, manual confirmation is not accepted": "жест требует реального детектора, ручное подтверждение не принимается",
+  "gesture cannot pass without a detected face/body target": "жест не может пройти без обнаруженной цели лица/тела",
+  "gesture challenge response evaluated": "оценён ответ на проверку жестом",
+  "audio evidence is missing": "данные аудио отсутствуют",
+  "audio anti-spoof model result is required": "требуется результат анти-спуфинг модели аудио",
+  "audio phrase transcript is unavailable": "транскрипт аудио-фразы недоступен",
+  "audio challenge and synthetic speech signals evaluated": "оценены аудио-проверка и признаки синтетической речи",
+  "check skipped in test mode": "проверка пропущена в тестовом режиме",
+  "video classifier model is not configured": "модель видео-классификатора не настроена",
+  "audio anti-spoof model is not configured": "анти-спуфинг модель аудио не настроена",
+};
+
+function reasonRu(value) {
+  return value == null ? value : REASON_RU[value] || value;
+}
+
+// A score factor is "<check name>: <reason>" (or "…: insufficient evidence").
+// Localize the check name and the reason halves independently.
+function factorRu(value) {
+  if (typeof value !== "string") return value;
+  const separator = value.indexOf(": ");
+  if (separator === -1) return value;
+  const name = value.slice(0, separator);
+  const detail = value.slice(separator + 2);
+  const detailRu = detail === "insufficient evidence" ? "недостаточно данных" : reasonRu(detail);
+  return `${checkNameRu(name)}: ${detailRu}`;
+}
+
 function api(path) {
   return `${el.apiUrl.value.replace(/\/$/, "")}${path}`;
 }
@@ -237,7 +315,7 @@ function logLine(text) {
 function logCheck(name, analysis) {
   const check = analysis.check || {};
   const risk = check.risk != null ? ` · риск ${fmt(check.risk)}` : "";
-  const reason = check.reason ? ` — ${check.reason}` : "";
+  const reason = check.reason ? ` — ${reasonRu(check.reason)}` : "";
   logLine(`${name}: ${statusRu(analysis.status)}${risk}${reason}`);
 }
 
@@ -247,7 +325,7 @@ function startCountdown(totalMs, label) {
   const startedAt = performance.now();
   const render = () => {
     const left = Math.max(0, totalMs - (performance.now() - startedAt));
-    el.stageValue.textContent = `${label} ${Math.ceil(left / 1000)}s`;
+    el.stageValue.textContent = `${label} ${Math.ceil(left / 1000)}с`;
   };
   render();
   const timer = window.setInterval(render, 250);
@@ -355,7 +433,7 @@ el.startVerification.addEventListener("click", async () => {
       }),
     });
     el.phraseInput.value = "";
-    el.gestureMetric.textContent = getStep("gesture").payload.expected_action;
+    el.gestureMetric.textContent = gestureActionRu(getStep("gesture").payload.expected_action);
     setStatus("сессия готова");
     renderStep();
   } catch (error) {
@@ -627,7 +705,7 @@ async function confirmGesture() {
   state.gestureDone = analysis.status === "passed";
   state.stepStatus.gesture = analysis.status;
   el.gestureMetric.textContent = metricText(statusRu(analysis.status), [
-    analysis.evidence.observed_action ? `распознано: ${analysis.evidence.observed_action}` : "действие не распознано",
+    analysis.evidence.observed_action ? `распознано: ${gestureActionRu(analysis.evidence.observed_action)}` : "действие не распознано",
   ]);
   logCheck("gesture", analysis);
   setStatus(`жест: ${statusRu(analysis.status)}`);
@@ -755,14 +833,14 @@ async function analyzeClassifier() {
 function classifierSummary(analysis) {
   const evidence = analysis.evidence || {};
   const parts = [];
-  if (evidence.fake_probability != null) parts.push(`p_fake ${fmt(evidence.fake_probability)}`);
+  if (evidence.fake_probability != null) parts.push(`p_подделки ${fmt(evidence.fake_probability)}`);
   if (evidence.cnn_probability != null) parts.push(`cnn ${fmt(evidence.cnn_probability)}`);
   if (evidence.model_scores && evidence.threshold != null) {
     const scores = Object.values(evidence.model_scores);
     const fakeVotes = scores.filter((score) => score >= evidence.threshold).length;
     parts.push(`${fakeVotes}/${scores.length} деревьев за подделку`);
   }
-  if (evidence.condition && evidence.condition !== "clean") parts.push(evidence.condition);
+  if (evidence.condition && evidence.condition !== "clean") parts.push(conditionRu(evidence.condition));
   if (evidence.low_info) parts.push("мало деталей");
   return metricText(statusRu(analysis.status), parts);
 }
@@ -853,7 +931,7 @@ function renderChecksBreakdown(result) {
   const rows = (result.checks || [])
     .map((check) => {
       const width = Math.round(check.risk * 100);
-      return `<div class="check-row ${check.status}" title="${escapeHtml(check.reason)}">
+      return `<div class="check-row ${check.status}" title="${escapeHtml(reasonRu(check.reason))}">
         <span class="check-name">${escapeHtml(checkNameRu(check.name))}</span>
         <span class="check-status">${escapeHtml(statusRu(check.status))}</span>
         <span class="check-riskbar"><i style="width:${width}%"></i></span>
@@ -862,7 +940,7 @@ function renderChecksBreakdown(result) {
     })
     .join("");
   const factors = result.factors?.length
-    ? `<p class="factors">${result.factors.map(escapeHtml).join(" · ")}</p>`
+    ? `<p class="factors">${result.factors.map((factor) => escapeHtml(factorRu(factor))).join(" · ")}</p>`
     : "";
   el.checksBreakdown.innerHTML = rows + factors;
 }
