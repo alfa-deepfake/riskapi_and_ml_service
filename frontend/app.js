@@ -433,6 +433,22 @@ function renderFaceState() {
 
 async function runLight() {
   const step = getStep("active_light");
+  // A positively absent face makes the flash dance pointless: skip the
+  // capture and multi-MB upload and let the server fail the check instantly.
+  // (facePresent === null means the browser has no FaceDetector — proceed.)
+  await updateFacePresence();
+  if (state.facePresent === false) {
+    const analysis = await requestJson("/v1/services/active-light/analyze", {
+      method: "POST",
+      body: JSON.stringify({ face_present: false, face_confidence: state.faceConfidence ?? 0 }),
+    });
+    state.serviceEvidence.active_light = analysis.evidence;
+    state.stepStatus.active_light = analysis.status;
+    el.lightMetric.textContent = metricText(analysis.status, ["no face in frame"]);
+    logCheck("active_light", analysis);
+    setStatus(`light ${analysis.status}`);
+    return;
+  }
   if (Array.isArray(step.payload.face_flash_pairs) && step.payload.face_flash_pairs.length) {
     return runFaceFlashLight(step.payload.face_flash_pairs);
   }
@@ -497,13 +513,15 @@ async function runFaceFlashLight(pairs) {
       el.stageValue.textContent = `BG ${index + 1}/${pairs.length}`;
       await sleep(160);
       const backgroundFile = `active_light_bg_${index}.png`;
-      form.append("files", await captureCameraPngBlob(), backgroundFile);
+      // The verifier crops faces to 256px — full-res 720p PNGs only bloat the
+      // upload (16 files, tens of MB through a tunnel); 640-wide is plenty.
+      form.append("files", await captureCameraPngBlob(640), backgroundFile);
 
       renderFaceFlashFrame(pair.lighting);
       el.stageValue.textContent = `LIGHT ${index + 1}/${pairs.length}`;
       await sleep(160);
       const lightingFile = `active_light_light_${index}.png`;
-      form.append("files", await captureCameraPngBlob(), lightingFile);
+      form.append("files", await captureCameraPngBlob(640), lightingFile);
 
       manifestPairs.push({
         background_file: backgroundFile,
@@ -872,13 +890,19 @@ async function recordVideoBlob(durationMs) {
   return recordStreamBlob(state.stream, durationMs);
 }
 
-async function captureCameraPngBlob() {
+async function captureCameraPngBlob(maxWidth) {
   if (!state.stream || el.camera.readyState < 2) {
     throw new Error("Camera stream is required for frame capture");
   }
   const canvas = document.createElement("canvas");
-  canvas.width = el.camera.videoWidth || 640;
-  canvas.height = el.camera.videoHeight || 480;
+  let width = el.camera.videoWidth || 640;
+  let height = el.camera.videoHeight || 480;
+  if (maxWidth && width > maxWidth) {
+    height = Math.round(height * (maxWidth / width));
+    width = maxWidth;
+  }
+  canvas.width = width;
+  canvas.height = height;
   const ctx = canvas.getContext("2d");
   ctx.drawImage(el.camera, 0, 0, canvas.width, canvas.height);
   return new Promise((resolve, reject) => {
