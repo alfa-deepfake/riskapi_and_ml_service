@@ -182,17 +182,34 @@ def _models() -> dict[str, xgb.Booster]:
     return _boosters
 
 
+_last_feats: dict[str, float] = {}
+
+
 def predict(img_path: Path) -> dict[str, float]:
     """Return {model_name: p_fake} for every loaded model."""
+    global _last_feats
     feats = features_for(img_path)
+    _last_feats = feats
     x = xgb.DMatrix(np.array([[feats.get(k, float("nan")) for k in FEAT_NAMES]], dtype=np.float32))
     return {name: float(b.predict(x)[0]) for name, b in _models().items()}
+
+
+# faces smaller than this get upscaled >2.8x by the 512 crop — the top of the
+# spectrum is then fabricated by our own resampling, so verdicts are unreliable.
+# ponytail: fixed cutoff; make quality-adaptive if the bank needs finer policy
+MIN_FACE_PX = 180
+
+# wholly-upscaled images (pre-resized before reaching us) carry no signal above
+# their native resolution — indistinguishable from generator HF-loss. Dataset
+# fakes measure >=4.8 here (swap keeps native background); genuine upscales <0.4.
+MIN_UPSAMPLE_DIFF = 0.4
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("usage: python infer.py <image_path> [more.png ...]", file=sys.stderr)
         sys.exit(1)
+    import face_crop as _fc
     header = "path".ljust(60) + "  ".join(n.rjust(6) for n, _ in MODEL_FILES)
     print(header)
     print("-" * len(header))
@@ -201,6 +218,21 @@ if __name__ == "__main__":
             scores = predict(Path(p))
             row = Path(p).name.ljust(60) + "  ".join(f"{scores.get(n, float('nan')):6.3f}" for n, _ in MODEL_FILES)
             verdicts = sum(1 for n, _ in MODEL_FILES if scores.get(n, 0) > 0.5)
-            print(f"{row}  → {verdicts}/6 vote fake")
+            face_px = _fc.last_face_px
+            up_diff = _last_feats.get("upsample_diff_256", 99.0)
+            caveat = None
+            if face_px is not None and face_px < MIN_FACE_PX:
+                caveat = f"face {face_px:.0f}px < {MIN_FACE_PX}px"
+            elif up_diff < MIN_UPSAMPLE_DIFF:
+                caveat = f"upscaled image, detail {up_diff:.2f} < {MIN_UPSAMPLE_DIFF}"
+            # asymmetric gate: low-info inputs must not produce a confident FAKE
+            # (false accusation is the expensive error), but a REAL verdict may
+            # pass with a warning — the bank can still escalate on the caveat
+            if caveat and verdicts >= 5:
+                print(f"{row}  → UNSURE ({caveat} — signal unreliable; raw votes {verdicts}/6)")
+            elif caveat:
+                print(f"{row}  → {verdicts}/6 vote fake  [warning: {caveat}]")
+            else:
+                print(f"{row}  → {verdicts}/6 vote fake")
         except Exception as e:
             print(f"{p}\tERROR\t{e}", file=sys.stderr)

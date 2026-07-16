@@ -36,12 +36,9 @@ class Settings(BaseSettings):
         alias="ML_VIDEO_CLIP_CHECKPOINT_PATH",
     )
     video_convnext_checkpoint_path: str | None = Field(default=None, alias="ML_VIDEO_CONVNEXT_CHECKPOINT_PATH")
-    video_xgb_models_dir: str = Field(default="models/xgb", alias="ML_VIDEO_XGB_MODELS_DIR")
-    video_xgb_threshold: float = Field(default=0.45, ge=0.0, le=1.0, alias="ML_VIDEO_XGB_THRESHOLD")
-    # Faces smaller than this (bbox max side, source px) get upscaled to the
-    # 512px training crop, which fabricates the high-frequency-loss signature
-    # the XGB ensemble reads as "generated" — their verdicts are not trusted.
-    video_min_face_px: float = Field(default=256.0, ge=0.0, alias="ML_VIDEO_MIN_FACE_PX")
+    # Thresholds and gate cutoffs are model artifacts shipped with the v15
+    # bundle (v15_blend_config.json), not env-tunable service settings.
+    video_v15_dir: str = Field(default="models/v15", alias="ML_VIDEO_V15_DIR")
     video_device: str = Field(default="auto", alias="ML_VIDEO_DEVICE")
     video_max_inferences: int = Field(default=12, alias="ML_VIDEO_MAX_INFERENCES")
     video_infer_every: int = Field(default=5, alias="ML_VIDEO_INFER_EVERY")

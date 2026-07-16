@@ -7,7 +7,9 @@ __pycache__/
 *.pyc
 
 # Heavy checkpoints stay out of git (GitHub 100MB cap); deployed via scp and
-# reach the container through the compose models/ volume. The small XGB
-# ensemble in models/xgb IS committed.
+# reach the container through the compose models/ volume. The small v15 XGB
+# trees, gate, configs and CNN calibrator in models/v15 ARE committed; only
+# the 5x111MB Noise-CNN fold weights are not.
 models/audio/*.pt
 models/asr/
+models/v15/cnn/*.pt

@@ -51,8 +51,10 @@ bash scripts/download_runtime_models.sh
 ```
 
 Она скачивает модели в `models/asr/faster-whisper-medium/` и
-`models/insightface/models/buffalo_l/`. XGB-бустеры и WavLM-чекпоинт
-размещаются в `models/xgb/` и `models/audio/` отдельно.
+`models/insightface/models/buffalo_l/`. Деревья/гейт/калибратор v15 уже
+закоммичены в `models/v15/`; веса Noise-CNN (`models/v15/cnn/*.pt`, 5×111МБ)
+и WavLM-чекпоинт (`models/audio/`) копируются на хост отдельно (scp из
+релизного бандла `v15_release`).
 
 ```bash
 docker compose up -d --build      # собрать образы и поднять в фоне

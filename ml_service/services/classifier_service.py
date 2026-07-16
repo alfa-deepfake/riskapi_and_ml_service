@@ -42,7 +42,10 @@ class ClassifierService:
             threshold=result.get("threshold"),
             model_name=result.get("model_name"),
             model_scores=result.get("model_scores"),
-            dropped_models=result.get("dropped_models"),
+            cnn_probability=result.get("cnn_probability"),
+            condition=result.get("condition"),
+            low_info=result.get("low_info"),
+            upsample_diff=result.get("upsample_diff"),
             frame_count=result.get("frame_count"),
             face_present=detected_face_present if detected_face_present is not None else face_present,
             face_confidence=detected_face_confidence if detected_face_confidence is not None else face_confidence,
@@ -55,9 +58,9 @@ class ClassifierService:
 
 
 def _run_video_model(video_path: Path) -> dict | None:
-    xgb_adapter = _get_xgb_adapter()
-    if xgb_adapter is not None:
-        return xgb_adapter.predict(video_path)
+    v15_adapter = _get_v15_adapter()
+    if v15_adapter is not None:
+        return v15_adapter.predict(video_path)
     model_path = Path(settings.video_clip_checkpoint_path)
     if not model_path.exists():
         return None
@@ -67,18 +70,26 @@ def _run_video_model(video_path: Path) -> dict | None:
     return adapter.predict(video_path)
 
 
+def warm_video_model() -> None:
+    """Eagerly load the v15 models (~25s of CNN construction on CPU) so the
+    first classifier request only pays inference latency. No-op when the
+    models or the ML dependencies are absent."""
+    adapter = _get_v15_adapter()
+    if adapter is not None:
+        adapter.load()
+
+
 @lru_cache(maxsize=1)
-def _get_xgb_adapter():
-    models_dir = Path(settings.video_xgb_models_dir)
-    if not (models_dir / "feature_names.txt").exists():
+def _get_v15_adapter():
+    models_dir = Path(settings.video_v15_dir)
+    if not (models_dir / "v15_blend_config.json").exists():
         return None
     try:
-        from ml_service.adapters.xgb_video_adapter import XgbVideoEnsembleAdapter
+        from ml_service.adapters.v15_video_adapter import V15VideoAdapter
     except ImportError:
         return None
-    return XgbVideoEnsembleAdapter(
+    return V15VideoAdapter(
         models_dir=models_dir,
-        threshold=settings.video_xgb_threshold,
         max_inferences=settings.video_max_inferences,
         infer_every=settings.video_infer_every,
     )
