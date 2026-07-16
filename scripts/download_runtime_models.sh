@@ -26,8 +26,10 @@ done
 archive=$(mktemp)
 trap 'rm -f "$archive"' EXIT
 download "$INSIGHTFACE_URL" "$archive"
-mkdir -p "$INSIGHTFACE_ROOT/models"
-unzip -oq "$archive" -d "$INSIGHTFACE_ROOT/models"
+# The release zip has no inner folder — extract into models/buffalo_l/, the
+# layout FaceAnalysis(name="buffalo_l") expects under its root.
+mkdir -p "$INSIGHTFACE_ROOT/models/buffalo_l"
+unzip -oq "$archive" -d "$INSIGHTFACE_ROOT/models/buffalo_l"
 
 test -f "$ASR_DIR/model.bin"
 test -f "$INSIGHTFACE_ROOT/models/buffalo_l/det_10g.onnx"
