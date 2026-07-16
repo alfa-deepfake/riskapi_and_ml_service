@@ -375,7 +375,12 @@ async function runStep(id) {
 
 async function startCamera() {
   setStatus("camera permission");
-  state.stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+  // The XGB forensic classifier needs the face near its 512px training crop;
+  // the browser default 640x480 leaves faces ~200px and its verdict gated off.
+  state.stream = await navigator.mediaDevices.getUserMedia({
+    video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+    audio: false,
+  });
   el.camera.srcObject = state.stream;
   await waitForVideo();
   el.faceGuide.classList.add("visible");
@@ -887,10 +892,16 @@ async function recordStreamBlob(stream, durationMs) {
     const chunks = [];
     let recorder;
     try {
-      recorder = new MediaRecorder(stream);
+      // Default ~2.5 Mbps VP8 smears the high-frequency detail the forensic
+      // video classifier scores; ask for more (ignored on audio-only streams).
+      recorder = new MediaRecorder(stream, { videoBitsPerSecond: 6_000_000 });
     } catch (error) {
-      reject(error);
-      return;
+      try {
+        recorder = new MediaRecorder(stream);
+      } catch (fallbackError) {
+        reject(fallbackError);
+        return;
+      }
     }
     recorder.ondataavailable = (event) => {
       if (event.data && event.data.size) chunks.push(event.data);
