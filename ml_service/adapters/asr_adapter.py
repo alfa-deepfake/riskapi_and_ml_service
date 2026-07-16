@@ -44,7 +44,7 @@ class WhisperAsrAdapter:
                     str(wav_path),
                     beam_size=1,
                     best_of=1,
-                    language="en",
+                    language="ru",
                     task="transcribe",
                     condition_on_previous_text=False,
                     without_timestamps=True,
