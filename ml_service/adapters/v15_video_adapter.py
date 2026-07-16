@@ -29,6 +29,7 @@ from typing import Any
 import cv2
 import joblib
 import numpy as np
+import timm
 import torch
 import xgboost
 from PIL import Image
@@ -46,7 +47,6 @@ from features_v6 import candidates_v6  # noqa: E402
 from features_v7 import candidates_v7  # noqa: E402
 from features_v8 import candidates_v8  # noqa: E402
 from features_v9 import candidates_v9  # noqa: E402
-from model_def import make_model  # noqa: E402
 from noise_map_v15 import noise_map_tensor  # noqa: E402
 
 FACE_CROP_SIZE = 512
@@ -77,26 +77,17 @@ class V15VideoAdapter:
         self.infer_every = max(1, infer_every)
         self._state: dict[str, Any] | None = None
 
-    def load(self) -> None:
-        """Eagerly load all models (the CNN folds take ~25s on CPU)."""
-        self._load()
-
     def predict(self, video_path: Path) -> dict[str, Any]:
-        st = self._load()
+        st = self.load()
         cap = cv2.VideoCapture(str(video_path))
         if not cap.isOpened():
             raise RuntimeError(f"Could not open uploaded video: {video_path}")
 
         frame_count = 0
         examined = 0
-        blend_ps: list[float] = []
-        tree_rows: list[dict[str, float]] = []
-        cnn_ps: list[float] = []
-        conds: list[str] = []
-        face_sizes: list[float] = []
-        upsample_diffs: list[float] = []
+        frames: list[dict[str, Any]] = []
         try:
-            while len(blend_ps) < self.max_inferences:
+            while len(frames) < self.max_inferences:
                 ok, frame = cap.read()
                 if not ok:
                     break
@@ -111,35 +102,29 @@ class V15VideoAdapter:
                 crop, face_size = _face_crop(frame)
                 if crop is None:
                     continue
-                scored = self._score_crop(st, crop)
-                blend_ps.append(scored["p"])
-                tree_rows.append(scored["trees"])
-                cnn_ps.append(scored["cnn_p"])
-                conds.append(scored["cond"])
-                upsample_diffs.append(scored["upsample_diff"])
-                if face_size is not None:
-                    face_sizes.append(face_size)
+                frames.append(self._score_crop(st, crop) | {"face_px": face_size})
         finally:
             cap.release()
 
+        face_sizes = [f["face_px"] for f in frames if f["face_px"] is not None]
         result: dict[str, Any] = {
             "threshold": st["blend"]["t_bin"],
             "model_name": "v15-xgb6+noise-cnn5",
             "frame_count": frame_count,
-            "face_present": bool(blend_ps),
-            "face_confidence": len(blend_ps) / examined if examined else 0.0,
-            "sampled_frames": len(blend_ps),
+            "face_present": bool(frames),
+            "face_confidence": len(frames) / examined if examined else 0.0,
+            "sampled_frames": len(frames),
             "feature_count": len(st["feat_names"]),
             "preprocessing": "insightface-buffalo_l-norm_crop-512+noise-map-256",
             "face_size_px": float(np.median(face_sizes)) if face_sizes else None,
         }
-        if not blend_ps:
+        if not frames:
             result.update({"fake_probability": None, "confidence": 0.0})
             return result
 
-        p = float(np.median(blend_ps))
+        p = float(np.median([f["p"] for f in frames]))
         face_px = result["face_size_px"]
-        upsample_diff = float(np.median(upsample_diffs))
+        upsample_diff = float(np.median([f["upsample_diff"] for f in frames]))
         low_info = (face_px is not None and face_px < MIN_FACE_PX) or upsample_diff < MIN_UPSAMPLE_DIFF
         borderline = st["blend"]["t_lo"] < p < st["blend"]["t_hi"]
         result.update(
@@ -148,10 +133,10 @@ class V15VideoAdapter:
                 # inside the grey band neither verdict is confident
                 "confidence": 0.5 if borderline else max(p, 1.0 - p),
                 "model_scores": {
-                    name: float(np.mean([row[name] for row in tree_rows])) for name in ["id"] + GENS
+                    name: float(np.mean([f["trees"][name] for f in frames])) for name in ["id"] + GENS
                 },
-                "cnn_probability": float(np.median(cnn_ps)),
-                "condition": Counter(conds).most_common(1)[0][0],
+                "cnn_probability": float(np.median([f["cnn_p"] for f in frames])),
+                "condition": Counter(f["cond"] for f in frames).most_common(1)[0][0],
                 "low_info": low_info,
                 "upsample_diff": upsample_diff,
             }
@@ -188,7 +173,8 @@ class V15VideoAdapter:
         logit = np.log(np.clip(mean_p, 1e-6, 1 - 1e-6) / np.clip(1 - mean_p, 1e-6, 1))
         return float(st["calibrator"].predict_proba(np.array([[logit]]))[:, 1][0])
 
-    def _load(self) -> dict[str, Any]:
+    def load(self) -> dict[str, Any]:
+        """Load and cache all models (the CNN folds take seconds on CPU)."""
         if self._state is not None:
             return self._state
         v13_dir = self.models_dir / "v13"
@@ -216,7 +202,7 @@ class V15VideoAdapter:
             ckpt = torch.load(
                 cnn_dir / f"noise_cnn_holdout_{held}.pt", map_location="cpu", weights_only=True
             )
-            model = make_model(False)
+            model = timm.create_model("convnext_tiny", pretrained=False, num_classes=1)
             model.load_state_dict(ckpt["state_dict"])
             model.eval()
             folds.append((model, float(cnn_cfg["folds"][held]["temperature"])))
