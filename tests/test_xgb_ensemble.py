@@ -71,6 +71,33 @@ def test_classifier_keeps_070_cutoff_without_threshold():
     assert check.status == "failed"
 
 
+def test_small_face_verdict_is_gated_to_unknown():
+    # A 200px webcam face upscaled to the 512px crop fabricates the fake
+    # signature — its verdict must not fail a real user.
+    check = score_classifier(
+        ClassifierEvidence(fake_probability=0.90, threshold=0.45, face_size_px=200.0),
+        min_face_px=256.0,
+    )
+    assert check.status == "unknown"
+    assert check.details["face_size_px"] == 200.0
+
+
+def test_large_face_verdict_is_not_gated():
+    check = score_classifier(
+        ClassifierEvidence(fake_probability=0.90, threshold=0.45, face_size_px=400.0),
+        min_face_px=256.0,
+    )
+    assert check.status == "failed"
+
+
+def test_unknown_face_size_is_not_gated():
+    check = score_classifier(
+        ClassifierEvidence(fake_probability=0.90, threshold=0.45),
+        min_face_px=256.0,
+    )
+    assert check.status == "failed"
+
+
 def test_classifier_details_include_model_scores():
     scores = {"id": 0.9, "loo_facefusion": 0.8}
     check = score_classifier(

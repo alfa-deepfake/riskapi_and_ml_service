@@ -13,7 +13,7 @@ from ml_service.core.challenge import ChallengePlan
 from ml_service.core.math_utils import best_lagged_correlation, clamp01, levenshtein_ratio
 
 
-def score_classifier(evidence: ClassifierEvidence | None) -> CheckScore:
+def score_classifier(evidence: ClassifierEvidence | None, min_face_px: float = 0.0) -> CheckScore:
     if evidence is not None and evidence.skipped:
         return _skipped("classifier", 0.25)
     if evidence is not None and evidence.face_present is False:
@@ -34,6 +34,29 @@ def score_classifier(evidence: ClassifierEvidence | None) -> CheckScore:
             confidence=0.0,
             weight=0.25,
             reason="frame classifier evidence is missing",
+        )
+
+    # The XGB features are forensic high-frequency statistics of a 512px face
+    # crop. A face captured smaller than that is upscaled by norm_crop, which
+    # fabricates exactly the smoothing signature the models flag as fake —
+    # train/face_crop.py requires callers to gate verdicts on the source size.
+    if evidence.face_size_px is not None and evidence.face_size_px < min_face_px:
+        return CheckScore(
+            name="classifier",
+            status="unknown",
+            risk=0.50,
+            confidence=0.0,
+            weight=0.25,
+            reason=(
+                f"face too small for forensic features ({evidence.face_size_px:.0f}px < "
+                f"{min_face_px:.0f}px source): upscaled crop fabricates the fake signature"
+            ),
+            details={
+                "face_size_px": evidence.face_size_px,
+                "min_face_px": min_face_px,
+                "fake_probability": evidence.fake_probability,
+                "model_scores": evidence.model_scores,
+            },
         )
 
     risk = clamp01(evidence.fake_probability)
