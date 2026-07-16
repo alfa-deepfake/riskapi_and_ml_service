@@ -290,7 +290,7 @@ video {
 }
 
 .tool::after {
-  content: "waiting";
+  content: "ожидание";
   color: var(--muted);
   font-size: 11px;
   text-transform: uppercase;
@@ -302,7 +302,7 @@ video {
 }
 
 .tool.active::after {
-  content: "current";
+  content: "текущий";
   color: var(--blue);
 }
 
@@ -312,7 +312,7 @@ video {
 }
 
 .tool.done::after {
-  content: "done";
+  content: "готово";
   color: var(--green);
 }
 
@@ -322,7 +322,7 @@ video {
 }
 
 .tool.failed::after {
-  content: "failed";
+  content: "ошибка";
   color: var(--red);
 }
 
@@ -332,7 +332,7 @@ video {
 }
 
 .tool.skipped::after {
-  content: "skipped";
+  content: "пропущено";
   color: var(--amber);
 }
 

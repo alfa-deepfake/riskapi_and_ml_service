@@ -26,11 +26,11 @@ class ChallengePlan(BaseModel):
 
 
 GESTURES = (
-    ("touch_mouth", "touch your lips"),
-    ("touch_nose", "touch your nose"),
+    ("touch_mouth", "коснитесь губ"),
+    ("touch_nose", "коснитесь носа"),
 )
 
-AUDIO_WORDS = ("bank", "signal", "river", "credit", "winter", "orange", "vector", "client")
+AUDIO_WORDS = ("банк", "сигнал", "река", "кредит", "зима", "апельсин", "вектор", "клиент")
 
 
 def generate_challenge(seed: int | None = None) -> ChallengePlan:
@@ -49,7 +49,7 @@ def generate_challenge(seed: int | None = None) -> ChallengePlan:
             ChallengeStep(
                 step_id=str(uuid.uuid4()),
                 type="active_light",
-                prompt="follow screen flashes",
+                prompt="следуйте за вспышками экрана",
                 payload={
                     "luma_sequence": light_sequence,
                     "colors": ["black", "white"],

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AntiDeepfake Challenge Console</title>
+    <title>Консоль проверки AntiDeepfake</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -12,10 +12,10 @@
       <section class="workspace">
         <div class="topbar">
           <div>
-            <p class="eyebrow">ML verification</p>
-            <h1>Challenge Console</h1>
+            <p class="eyebrow">ML-проверка</p>
+            <h1>Консоль проверки</h1>
           </div>
-          <div class="status" id="status">idle</div>
+          <div class="status" id="status">ожидание</div>
         </div>
 
         <div class="grid">
@@ -29,10 +29,10 @@
               <input id="uid" />
             </label>
             <label>
-              Check ID
+              ID проверки
               <input id="checkId" />
             </label>
-            <button id="startVerification">Start verification</button>
+            <button id="startVerification">Начать проверку</button>
           </section>
 
           <section class="panel challenge-panel">
@@ -40,21 +40,21 @@
               <video id="camera" autoplay muted playsinline></video>
               <div class="face-guide" id="faceGuide" aria-hidden="true">
                 <div class="face-oval" id="faceOval"></div>
-                <p class="guide-hint" id="guideHint">Align your face with the oval</p>
+                <p class="guide-hint" id="guideHint">Совместите лицо с овалом</p>
               </div>
               <div class="stage-overlay">
-                <p id="currentStep">Create a session to start</p>
+                <p id="currentStep">Создайте сессию для начала</p>
                 <strong id="stageValue">--</strong>
-                <small id="stepHint">Press Start verification</small>
+                <small id="stepHint">Нажмите «Начать проверку»</small>
               </div>
             </div>
             <div class="controls">
-              <button id="primaryAction" disabled>Continue</button>
-              <button id="skipStep" class="test-only" disabled>Skip step</button>
-              <button id="resetFlow">Reset</button>
+              <button id="primaryAction" disabled>Продолжить</button>
+              <button id="skipStep" class="test-only" disabled>Пропустить шаг</button>
+              <button id="resetFlow">Сбросить</button>
             </div>
             <div class="result-block">
-              <div class="decision" id="decision">not scored</div>
+              <div class="decision" id="decision">не оценено</div>
               <div class="risk-line" id="riskLine"></div>
               <div class="checks" id="checksBreakdown"></div>
               <pre id="scoreJson"></pre>
@@ -62,42 +62,42 @@
           </section>
 
           <section class="panel evidence">
-            <h2>Tools</h2>
+            <h2>Инструменты</h2>
             <div class="tool-list" id="toolList">
-              <div class="tool active" data-tool="camera">Camera</div>
-              <div class="tool" data-tool="active_light">Active light</div>
-              <div class="tool" data-tool="gesture">Gesture</div>
-              <div class="tool" data-tool="rppg">Pulse rPPG</div>
-              <div class="tool" data-tool="audio">Audio phrase</div>
-              <div class="tool" data-tool="score">Risk score</div>
+              <div class="tool active" data-tool="camera">Камера</div>
+              <div class="tool" data-tool="active_light">Активный свет</div>
+              <div class="tool" data-tool="gesture">Жест</div>
+              <div class="tool" data-tool="rppg">Пульс rPPG</div>
+              <div class="tool" data-tool="audio">Аудио-фраза</div>
+              <div class="tool" data-tool="score">Оценка риска</div>
             </div>
             <div class="metric">
-              <span>Face in frame</span>
+              <span>Лицо в кадре</span>
               <b id="faceMetric">—</b>
             </div>
             <div class="metric">
-              <span>Active light</span>
-              <b id="lightMetric">pending</b>
+              <span>Активный свет</span>
+              <b id="lightMetric">ожидание</b>
             </div>
             <div class="metric">
-              <span>Pulse</span>
-              <b id="pulseMetric">pending</b>
+              <span>Пульс</span>
+              <b id="pulseMetric">ожидание</b>
             </div>
             <div class="metric">
-              <span>Gesture</span>
-              <b id="gestureMetric">pending</b>
+              <span>Жест</span>
+              <b id="gestureMetric">ожидание</b>
             </div>
             <div class="metric">
-              <span>Audio</span>
-              <b id="audioMetric">pending</b>
+              <span>Аудио</span>
+              <b id="audioMetric">ожидание</b>
             </div>
             <div class="metric">
-              <span>Video classifier</span>
-              <b id="classifierMetric">pending</b>
+              <span>Видео-классификатор</span>
+              <b id="classifierMetric">ожидание</b>
             </div>
             <label>
-              Recognized phrase (server ASR)
-              <input id="phraseInput" placeholder="filled after the audio step" readonly />
+              Распознанная фраза (ASR сервера)
+              <input id="phraseInput" placeholder="заполняется после аудио-шага" readonly />
             </label>
           </section>
 

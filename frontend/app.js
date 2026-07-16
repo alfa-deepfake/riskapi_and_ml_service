@@ -10,45 +10,45 @@ const REQUEST_TIMEOUT_MS = Number(appConfig.requestTimeoutMs || 120000);
 const FLOW = [
   {
     id: "camera",
-    title: "Camera check",
-    value: "camera",
-    hint: "Allow camera access and align your face with the oval guide.",
-    action: "Start camera",
+    title: "Проверка камеры",
+    value: "камера",
+    hint: "Разрешите доступ к камере и совместите лицо с овалом.",
+    action: "Включить камеру",
   },
   {
     id: "active_light",
-    title: "Active light challenge",
-    value: "black / white",
-    hint: "Keep your face inside the oval while the screen flashes black and white.",
-    action: "Run flashes",
+    title: "Проверка активным светом",
+    value: "чёрный / белый",
+    hint: "Держите лицо внутри овала, пока экран мигает чёрным и белым.",
+    action: "Запустить вспышки",
   },
   {
     id: "gesture",
-    title: "Gesture challenge",
-    value: "gesture",
-    hint: "Perform the gesture shown by the challenge, keeping your face inside the oval.",
-    action: "Confirm gesture",
+    title: "Проверка жестом",
+    value: "жест",
+    hint: "Выполните показанный жест, удерживая лицо внутри овала.",
+    action: "Подтвердить жест",
   },
   {
     id: "rppg",
-    title: "Pulse check",
-    value: "pulse",
-    hint: "Hold still with your face inside the oval for a short rPPG sampling window.",
-    action: "Sample pulse",
+    title: "Проверка пульса",
+    value: "пульс",
+    hint: "Не двигайтесь, удерживая лицо внутри овала, для короткого замера rPPG.",
+    action: "Замерить пульс",
   },
   {
     id: "audio",
-    title: "Audio phrase challenge",
-    value: "phrase",
-    hint: "Say the generated phrase. For MVP the transcript field is editable.",
-    action: "Record audio",
+    title: "Проверка аудио-фразой",
+    value: "фраза",
+    hint: "Произнесите сгенерированную фразу. Транскрипт распознаётся на сервере.",
+    action: "Записать аудио",
   },
   {
     id: "score",
-    title: "Risk score",
-    value: "score",
-    hint: "Submit collected evidence to ML service and risk-api callback.",
-    action: "Submit score",
+    title: "Оценка риска",
+    value: "оценка",
+    hint: "Отправить собранные данные в ML-сервис и колбэк risk-api.",
+    action: "Отправить на оценку",
   },
 ];
 
@@ -114,6 +114,38 @@ function setStatus(value) {
   el.status.textContent = value;
 }
 
+// The server returns English status/decision tokens (passed/failed/allow/…);
+// map them to Russian for display while keeping the raw token for CSS classes
+// and flow logic.
+const STATUS_RU = {
+  passed: "пройдено",
+  failed: "не пройдено",
+  unknown: "неизвестно",
+  skipped: "пропущено",
+  pending: "ожидание",
+  allow: "разрешено",
+  review: "проверка",
+  deny: "отказано",
+};
+
+function statusRu(value) {
+  return STATUS_RU[value] || value;
+}
+
+// Check identifiers from the server, mapped to Russian labels for the score
+// breakdown; unknown names fall through unchanged.
+const CHECK_NAME_RU = {
+  active_light: "Активный свет",
+  gesture: "Жест",
+  audio: "Аудио",
+  rppg: "Пульс",
+  classifier: "Видео-классификатор",
+};
+
+function checkNameRu(value) {
+  return CHECK_NAME_RU[value] || value;
+}
+
 function api(path) {
   return `${el.apiUrl.value.replace(/\/$/, "")}${path}`;
 }
@@ -136,10 +168,10 @@ async function fetchChecked(path, options) {
     response = await fetch(api(path), { ...options, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
   } catch (error) {
     if (error?.name === "TimeoutError" || error?.name === "AbortError") {
-      logLine(`${path}: no response in ${Math.round(REQUEST_TIMEOUT_MS / 1000)}s — server or tunnel is down`);
-      throw new Error(`No response from ${path} in ${Math.round(REQUEST_TIMEOUT_MS / 1000)}s`);
+      logLine(`${path}: нет ответа за ${Math.round(REQUEST_TIMEOUT_MS / 1000)}с — сервер или туннель недоступен`);
+      throw new Error(`Нет ответа от ${path} за ${Math.round(REQUEST_TIMEOUT_MS / 1000)}с`);
     }
-    logLine(`${path}: network error — ${error?.message || error}`);
+    logLine(`${path}: сетевая ошибка — ${error?.message || error}`);
     throw error;
   }
   if (!response.ok) {
@@ -169,9 +201,9 @@ function renderStep() {
   if (!state.session) {
     el.primaryAction.disabled = true;
     el.skipStep.disabled = true;
-    el.currentStep.textContent = "Create a session to start";
+    el.currentStep.textContent = "Создайте сессию для начала";
     el.stageValue.textContent = "--";
-    el.stepHint.textContent = "Press Start verification";
+    el.stepHint.textContent = "Нажмите «Начать проверку»";
     updateTools();
     return;
   }
@@ -180,7 +212,7 @@ function renderStep() {
   // session is consumed, so resubmitting would just 404.
   el.primaryAction.disabled = step.id === "score" && state.scored;
   el.skipStep.disabled = !TEST_SKIP_ENABLED || step.id === "score";
-  el.currentStep.textContent = `Step ${state.stepIndex + 1}/${FLOW.length} — ${step.title}`;
+  el.currentStep.textContent = `Шаг ${state.stepIndex + 1}/${FLOW.length} — ${step.title}`;
   el.stageValue.textContent = displayValue(step);
   el.stepHint.textContent = displayHint(step);
   el.primaryAction.textContent = step.action;
@@ -204,9 +236,9 @@ function logLine(text) {
 
 function logCheck(name, analysis) {
   const check = analysis.check || {};
-  const risk = check.risk != null ? ` · risk ${fmt(check.risk)}` : "";
+  const risk = check.risk != null ? ` · риск ${fmt(check.risk)}` : "";
   const reason = check.reason ? ` — ${check.reason}` : "";
-  logLine(`${name}: ${analysis.status}${risk}${reason}`);
+  logLine(`${name}: ${statusRu(analysis.status)}${risk}${reason}`);
 }
 
 // Countdown in the stage header while MediaRecorder runs, so a 5-9s silent
@@ -243,7 +275,7 @@ function displayValue(step) {
 
 function displayHint(step) {
   if (step.id === "audio") {
-    return "Say the phrase out loud — the server transcribes and verifies it.";
+    return "Произнесите фразу вслух — сервер распознает и проверит её.";
   }
   return step.hint;
 }
@@ -266,8 +298,8 @@ function toolState(id) {
   if (state.skipped.has(id)) return "skipped";
   if (id === "camera") return state.stream ? "done" : "";
   if (id === "score") {
-    const decision = el.decision.textContent;
-    if (decision === "not scored") return "";
+    const decision = el.decision.dataset.decision || "";
+    if (!decision) return "";
     return decision === "allow" ? "done" : "failed";
   }
   const status = state.stepStatus[id];
@@ -295,13 +327,14 @@ function resetEvidence() {
   state.faceConfidence = null;
   state.gestureAttempt = null;
   state.serviceEvidence = {};
-  el.lightMetric.textContent = "pending";
-  el.pulseMetric.textContent = "pending";
-  el.gestureMetric.textContent = "pending";
-  el.audioMetric.textContent = "pending";
-  el.classifierMetric.textContent = "pending";
+  el.lightMetric.textContent = "ожидание";
+  el.pulseMetric.textContent = "ожидание";
+  el.gestureMetric.textContent = "ожидание";
+  el.audioMetric.textContent = "ожидание";
+  el.classifierMetric.textContent = "ожидание";
   el.decision.className = "decision";
-  el.decision.textContent = "not scored";
+  el.decision.dataset.decision = "";
+  el.decision.textContent = "не оценено";
   el.riskLine.textContent = "";
   el.checksBreakdown.innerHTML = "";
   el.scoreJson.textContent = "";
@@ -312,7 +345,7 @@ function resetEvidence() {
 el.startVerification.addEventListener("click", async () => {
   try {
     resetEvidence();
-    setStatus("creating session");
+    setStatus("создание сессии");
     state.session = await requestJson("/v1/sessions", {
       method: "POST",
       body: JSON.stringify({
@@ -323,10 +356,10 @@ el.startVerification.addEventListener("click", async () => {
     });
     el.phraseInput.value = "";
     el.gestureMetric.textContent = getStep("gesture").payload.expected_action;
-    setStatus("session ready");
+    setStatus("сессия готова");
     renderStep();
   } catch (error) {
-    setStatus("session error");
+    setStatus("ошибка сессии");
     alert(error.message);
   }
 });
@@ -341,7 +374,7 @@ el.primaryAction.addEventListener("click", async () => {
       advance();
     }
   } catch (error) {
-    setStatus(`${step.id} error`);
+    setStatus(`ошибка: ${step.id}`);
     alert(error.message);
   } finally {
     renderStep();
@@ -353,7 +386,7 @@ el.skipStep.addEventListener("click", () => {
   const step = currentFlowStep();
   state.skipped.add(step.id);
   applySkipEvidence(step.id);
-  setStatus(`${step.id} skipped`);
+  setStatus(`пропущено: ${step.id}`);
   advance();
 });
 
@@ -361,7 +394,7 @@ el.resetFlow.addEventListener("click", () => {
   resetEvidence();
   state.session = null;
   renderStep();
-  setStatus("idle");
+  setStatus("ожидание");
 });
 
 async function runStep(id) {
@@ -374,7 +407,7 @@ async function runStep(id) {
 }
 
 async function startCamera() {
-  setStatus("camera permission");
+  setStatus("запрос доступа к камере");
   // The XGB forensic classifier needs the face near its 512px training crop;
   // the browser default 640x480 leaves faces ~200px and its verdict gated off.
   state.stream = await navigator.mediaDevices.getUserMedia({
@@ -388,8 +421,8 @@ async function startCamera() {
   renderFaceState();
   startFaceWatch();
   startPulseCollection();
-  logLine(`camera: stream started (${el.camera.videoWidth}x${el.camera.videoHeight})`);
-  setStatus("camera ready");
+  logLine(`камера: поток запущен (${el.camera.videoWidth}x${el.camera.videoHeight})`);
+  setStatus("камера готова");
 }
 
 // FaceDetector is available only in some Chromium builds; when it is absent
@@ -411,23 +444,23 @@ function renderFaceState() {
   el.faceOval.classList.toggle("no-face", state.facePresent === false);
   if (!state.stream) {
     el.faceMetric.textContent = "—";
-    el.guideHint.textContent = "Align your face with the oval";
+    el.guideHint.textContent = "Совместите лицо с овалом";
     return;
   }
   if (!("FaceDetector" in window)) {
-    el.faceMetric.textContent = "no browser detector";
-    el.guideHint.textContent = "Align your face with the oval";
+    el.faceMetric.textContent = "нет детектора в браузере";
+    el.guideHint.textContent = "Совместите лицо с овалом";
     return;
   }
   if (state.facePresent === true) {
-    el.faceMetric.textContent = "detected";
-    el.guideHint.textContent = "Face detected — hold this position";
+    el.faceMetric.textContent = "обнаружено";
+    el.guideHint.textContent = "Лицо обнаружено — сохраняйте положение";
   } else if (state.facePresent === false) {
-    el.faceMetric.textContent = "not found";
-    el.guideHint.textContent = "Face not found — move into the oval";
+    el.faceMetric.textContent = "не найдено";
+    el.guideHint.textContent = "Лицо не найдено — переместитесь в овал";
   } else {
     el.faceMetric.textContent = "—";
-    el.guideHint.textContent = "Align your face with the oval";
+    el.guideHint.textContent = "Совместите лицо с овалом";
   }
 }
 
@@ -444,9 +477,9 @@ async function runLight() {
     });
     state.serviceEvidence.active_light = analysis.evidence;
     state.stepStatus.active_light = analysis.status;
-    el.lightMetric.textContent = metricText(analysis.status, ["no face in frame"]);
+    el.lightMetric.textContent = metricText(statusRu(analysis.status), ["лицо не в кадре"]);
     logCheck("active_light", analysis);
-    setStatus(`light ${analysis.status}`);
+    setStatus(`свет: ${statusRu(analysis.status)}`);
     return;
   }
   if (Array.isArray(step.payload.face_flash_pairs) && step.payload.face_flash_pairs.length) {
@@ -455,8 +488,8 @@ async function runLight() {
   const sequence = step.payload.luma_sequence;
   state.expectedLuma = [...sequence];
   state.observedLuma = [];
-  el.currentStep.textContent = "Active light challenge";
-  setStatus("active light");
+  el.currentStep.textContent = "Проверка активным светом";
+  setStatus("активный свет");
 
   await enterFullscreenIfPossible();
   el.flashFullscreen.classList.add("visible");
@@ -466,7 +499,7 @@ async function runLight() {
       const color = value > 127 ? "#ffffff" : "#000000";
       el.flashFullscreen.style.backgroundColor = color;
       el.stage.style.backgroundColor = color;
-      el.stageValue.textContent = value > 127 ? "WHITE" : "BLACK";
+      el.stageValue.textContent = value > 127 ? "БЕЛЫЙ" : "ЧЁРНЫЙ";
       await sleep(LIGHT_SETTLE_MS);
       // Neutral fallback: if the camera frame is unavailable the sample must NOT
       // default to the expected value, or the check passes without a camera.
@@ -490,18 +523,18 @@ async function runLight() {
   });
   state.serviceEvidence.active_light = analysis.evidence;
   state.stepStatus.active_light = analysis.status;
-  el.lightMetric.textContent = metricText(analysis.status, [
-    analysis.check ? `risk ${fmt(analysis.check.risk)}` : "",
+  el.lightMetric.textContent = metricText(statusRu(analysis.status), [
+    analysis.check ? `риск ${fmt(analysis.check.risk)}` : "",
   ]);
   logCheck("active_light", analysis);
-  setStatus("light captured");
+  setStatus("свет записан");
 }
 
 async function runFaceFlashLight(pairs) {
   const manifestPairs = [];
   const form = new FormData();
-  el.currentStep.textContent = "Face flashing challenge";
-  setStatus("face flashing");
+  el.currentStep.textContent = "Проверка вспышками света";
+  setStatus("вспышки света");
 
   await enterFullscreenIfPossible();
   el.flashFullscreen.classList.add("visible");
@@ -510,7 +543,7 @@ async function runFaceFlashLight(pairs) {
     for (let index = 0; index < pairs.length; index += 1) {
       const pair = pairs[index];
       renderFaceFlashFrame(pair.background);
-      el.stageValue.textContent = `BG ${index + 1}/${pairs.length}`;
+      el.stageValue.textContent = `ФОН ${index + 1}/${pairs.length}`;
       await sleep(160);
       const backgroundFile = `active_light_bg_${index}.png`;
       // The verifier crops faces to 256px — full-res 720p PNGs only bloat the
@@ -518,7 +551,7 @@ async function runFaceFlashLight(pairs) {
       form.append("files", await captureCameraPngBlob(640), backgroundFile);
 
       renderFaceFlashFrame(pair.lighting);
-      el.stageValue.textContent = `LIGHT ${index + 1}/${pairs.length}`;
+      el.stageValue.textContent = `СВЕТ ${index + 1}/${pairs.length}`;
       await sleep(160);
       const lightingFile = `active_light_light_${index}.png`;
       form.append("files", await captureCameraPngBlob(640), lightingFile);
@@ -545,12 +578,12 @@ async function runFaceFlashLight(pairs) {
   state.stepStatus.active_light = analysis.status;
   state.expectedLuma = pairs.map((pair) => pair.lighting.lighting_rgb?.[0] ?? 255);
   state.observedLuma = new Array(pairs.length).fill(0);
-  el.lightMetric.textContent = metricText(analysis.status, [
-    analysis.evidence.verifier_score != null ? `score ${fmt(analysis.evidence.verifier_score)}` : "",
-    analysis.evidence.pair_count != null ? `${analysis.evidence.pair_count} pairs` : "",
+  el.lightMetric.textContent = metricText(statusRu(analysis.status), [
+    analysis.evidence.verifier_score != null ? `оценка ${fmt(analysis.evidence.verifier_score)}` : "",
+    analysis.evidence.pair_count != null ? `${analysis.evidence.pair_count} пар` : "",
   ]);
   logCheck("active_light", analysis);
-  setStatus(`light ${analysis.status}`);
+  setStatus(`свет: ${statusRu(analysis.status)}`);
 }
 
 function renderFaceFlashFrame(challenge) {
@@ -574,36 +607,36 @@ function rgbCss(rgb) {
 
 async function confirmGesture() {
   const gesture = getStep("gesture");
-  setStatus("recording gesture");
-  const blob = await recordWithCountdown(gesture.duration_ms || 5000, "REC");
+  setStatus("запись жеста");
+  const blob = await recordWithCountdown(gesture.duration_ms || 5000, "ЗАПИСЬ");
   const form = new FormData();
   form.append("file", blob, "gesture.webm");
   form.append("expected_action", gesture.payload.expected_action);
   if (state.facePresent !== null) form.append("face_present", String(state.facePresent));
-  el.stageValue.textContent = "analyzing…";
-  setStatus("gesture: analyzing");
+  el.stageValue.textContent = "анализ…";
+  setStatus("жест: анализ");
   const analysis = await requestForm("/v1/services/gesture/analyze-video", form);
   state.serviceEvidence.gesture = analysis.evidence;
   state.gestureAttempt = analysis.evidence;
   state.gestureDone = analysis.status === "passed";
   state.stepStatus.gesture = analysis.status;
-  el.gestureMetric.textContent = metricText(analysis.status, [
-    analysis.evidence.observed_action ? `saw: ${analysis.evidence.observed_action}` : "no action seen",
+  el.gestureMetric.textContent = metricText(statusRu(analysis.status), [
+    analysis.evidence.observed_action ? `распознано: ${analysis.evidence.observed_action}` : "действие не распознано",
   ]);
   logCheck("gesture", analysis);
-  setStatus(`gesture ${analysis.status}`);
+  setStatus(`жест: ${statusRu(analysis.status)}`);
 }
 
 async function samplePulse() {
-  setStatus("recording rPPG video");
+  setStatus("запись видео rPPG");
   try {
-    const blob = await recordWithCountdown(9000, "PULSE");
+    const blob = await recordWithCountdown(9000, "ПУЛЬС");
     const form = new FormData();
     form.append("file", blob, "rppg.webm");
     if (state.facePresent !== null) form.append("face_present", String(state.facePresent));
     if (state.faceConfidence !== null) form.append("face_confidence", String(state.faceConfidence));
-    el.stageValue.textContent = "analyzing…";
-    setStatus("pulse: analyzing (first run may take ~1min)");
+    el.stageValue.textContent = "анализ…";
+    setStatus("пульс: анализ (первый запуск до ~1 мин)");
     const analysis = await requestForm("/v1/services/rppg/analyze-video", form);
     state.serviceEvidence.rppg = analysis.evidence;
     state.pulse = {
@@ -611,16 +644,16 @@ async function samplePulse() {
       signal_quality: analysis.evidence.signal_quality ?? null,
     };
     state.stepStatus.rppg = analysis.status;
-    el.pulseMetric.textContent = metricText(analysis.status, [
-      analysis.evidence.bpm != null ? `${Math.round(analysis.evidence.bpm)} bpm` : "no pulse signal",
+    el.pulseMetric.textContent = metricText(statusRu(analysis.status), [
+      analysis.evidence.bpm != null ? `${Math.round(analysis.evidence.bpm)} уд/мин` : "нет сигнала пульса",
       analysis.evidence.signal_quality != null ? `SQI ${fmt(analysis.evidence.signal_quality)}` : "",
     ]);
     logCheck("rppg", analysis);
-    setStatus(`pulse ${analysis.status}`);
+    setStatus(`пульс: ${statusRu(analysis.status)}`);
     return;
   } catch (_error) {
-    logLine("rppg: video upload failed, falling back to luma samples");
-    setStatus("rPPG video failed, using samples");
+    logLine("rppg: загрузка видео не удалась, используются образцы яркости");
+    setStatus("видео rPPG не удалось, используются образцы");
   }
 
   for (let index = 0; index < 80; index += 1) {
@@ -640,20 +673,20 @@ async function samplePulse() {
   });
   state.serviceEvidence.rppg = analysis.evidence;
   state.stepStatus.rppg = analysis.status;
-  el.pulseMetric.textContent = analysis.status;
+  el.pulseMetric.textContent = statusRu(analysis.status);
   logCheck("rppg", analysis);
-  setStatus("pulse sampled");
+  setStatus("пульс замерен");
 }
 
 async function recordAudio() {
   const audioStep = getStep("audio_phrase");
   el.stageValue.textContent = audioStep.prompt;
-  setStatus("recording audio");
+  setStatus("запись аудио");
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     const started = performance.now();
-    const stopCountdown = startCountdown(audioStep.duration_ms || 4000, "SPEAK");
+    const stopCountdown = startCountdown(audioStep.duration_ms || 4000, "ГОВОРИТЕ");
     let blob;
     try {
       blob = await recordStreamBlob(stream, audioStep.duration_ms || 4000);
@@ -667,19 +700,19 @@ async function recordAudio() {
     const form = new FormData();
     form.append("file", blob, "audio.webm");
     form.append("phrase_expected", audioStep.payload.phrase);
-    el.stageValue.textContent = "analyzing…";
-    setStatus("audio: analyzing");
+    el.stageValue.textContent = "анализ…";
+    setStatus("аудио: анализ");
     const analysis = await requestForm("/v1/services/audio/analyze", form);
     state.serviceEvidence.audio = analysis.evidence;
     state.stepStatus.audio = analysis.status;
-    el.phraseInput.value = analysis.evidence.phrase_transcribed ?? "(no transcript)";
-    el.audioMetric.textContent = metricText(analysis.status, [
-      analysis.evidence.ai_probability != null ? `AI ${fmt(analysis.evidence.ai_probability)}` : "model n/a",
-      analysis.evidence.duration_seconds != null ? `${fmt(analysis.evidence.duration_seconds, 1)}s` : "",
+    el.phraseInput.value = analysis.evidence.phrase_transcribed ?? "(нет транскрипта)";
+    el.audioMetric.textContent = metricText(statusRu(analysis.status), [
+      analysis.evidence.ai_probability != null ? `ИИ ${fmt(analysis.evidence.ai_probability)}` : "модель недоступна",
+      analysis.evidence.duration_seconds != null ? `${fmt(analysis.evidence.duration_seconds, 1)}с` : "",
     ]);
     logCheck("audio", analysis);
     if (analysis.evidence.phrase_transcribed != null) {
-      logLine(`audio: server heard "${analysis.evidence.phrase_transcribed}"`);
+      logLine(`аудио: сервер распознал "${analysis.evidence.phrase_transcribed}"`);
     }
   } catch (_error) {
     state.audio = { duration_seconds: 3.0 };
@@ -689,19 +722,19 @@ async function recordAudio() {
       detector: "browser_recording_failed",
     };
     state.stepStatus.audio = "unknown";
-    el.audioMetric.textContent = "unknown";
-    logLine("audio: browser recording failed");
+    el.audioMetric.textContent = statusRu("unknown");
+    logLine("аудио: запись в браузере не удалась");
   }
 
-  setStatus("audio captured");
+  setStatus("аудио записано");
 }
 
 async function analyzeClassifier() {
   if (!state.stream) return;
-  setStatus("recording classifier clip");
-  const blob = await recordWithCountdown(2500, "REC");
-  el.stageValue.textContent = "analyzing…";
-  setStatus("classifier: analyzing");
+  setStatus("запись клипа классификатора");
+  const blob = await recordWithCountdown(2500, "ЗАПИСЬ");
+  el.stageValue.textContent = "анализ…";
+  setStatus("классификатор: анализ");
   const form = new FormData();
   form.append("file", blob, "classifier.webm");
   if (state.facePresent !== null) form.append("face_present", String(state.facePresent));
@@ -710,7 +743,7 @@ async function analyzeClassifier() {
   state.serviceEvidence.classifier = analysis.evidence;
   el.classifierMetric.textContent = classifierSummary(analysis);
   logCheck("classifier", analysis);
-  setStatus(`classifier ${analysis.status}`);
+  setStatus(`классификатор: ${statusRu(analysis.status)}`);
 }
 
 function classifierSummary(analysis) {
@@ -721,11 +754,11 @@ function classifierSummary(analysis) {
   if (evidence.model_scores && evidence.threshold != null) {
     const scores = Object.values(evidence.model_scores);
     const fakeVotes = scores.filter((score) => score >= evidence.threshold).length;
-    parts.push(`${fakeVotes}/${scores.length} trees vote fake`);
+    parts.push(`${fakeVotes}/${scores.length} деревьев за подделку`);
   }
   if (evidence.condition && evidence.condition !== "clean") parts.push(evidence.condition);
-  if (evidence.low_info) parts.push("low detail");
-  return metricText(analysis.status, parts);
+  if (evidence.low_info) parts.push("мало деталей");
+  return metricText(statusRu(analysis.status), parts);
 }
 
 async function submitEvidence() {
@@ -738,7 +771,7 @@ async function submitEvidence() {
         face_present: state.facePresent,
         face_confidence: state.faceConfidence,
       };
-      el.classifierMetric.textContent = "unavailable";
+      el.classifierMetric.textContent = "недоступно";
     }
   }
   const gesture = getStep("gesture");
@@ -787,20 +820,21 @@ async function submitEvidence() {
     },
   };
 
-  setStatus("scoring");
+  setStatus("оценка");
   const result = await requestJson(`/v1/sessions/${state.session.session_id}/evidence`, {
     method: "POST",
     body: JSON.stringify(payload),
   });
   state.scored = true;
   el.decision.className = `decision ${result.decision}`;
-  el.decision.textContent = result.decision;
-  el.riskLine.textContent = `risk ${fmt(result.risk_score)} · confidence ${fmt(result.confidence)}`;
+  el.decision.dataset.decision = result.decision;
+  el.decision.textContent = statusRu(result.decision);
+  el.riskLine.textContent = `риск ${fmt(result.risk_score)} · уверенность ${fmt(result.confidence)}`;
   renderChecksBreakdown(result);
-  logLine(`score: ${result.decision} (risk ${fmt(result.risk_score)})`);
+  logLine(`оценка: ${statusRu(result.decision)} (риск ${fmt(result.risk_score)})`);
   el.scoreJson.textContent += `\n${JSON.stringify(result, null, 2)}\n`;
   el.scoreJson.scrollTop = el.scoreJson.scrollHeight;
-  setStatus("scored");
+  setStatus("оценено");
 }
 
 function escapeHtml(value) {
@@ -814,8 +848,8 @@ function renderChecksBreakdown(result) {
     .map((check) => {
       const width = Math.round(check.risk * 100);
       return `<div class="check-row ${check.status}" title="${escapeHtml(check.reason)}">
-        <span class="check-name">${escapeHtml(check.name)}</span>
-        <span class="check-status">${escapeHtml(check.status)}</span>
+        <span class="check-name">${escapeHtml(checkNameRu(check.name))}</span>
+        <span class="check-status">${escapeHtml(statusRu(check.status))}</span>
         <span class="check-riskbar"><i style="width:${width}%"></i></span>
         <span class="check-risk">${fmt(check.risk)}</span>
       </div>`;
@@ -829,30 +863,30 @@ function renderChecksBreakdown(result) {
 
 function applySkipEvidence(id) {
   state.stepStatus[id] = "skipped";
-  logLine(`${id}: skipped (test mode)`);
+  logLine(`${id}: пропущено (тестовый режим)`);
   if (id === "camera") return;
   if (id === "active_light") {
     const step = getStep("active_light");
     state.expectedLuma = [...step.payload.luma_sequence];
     state.observedLuma = [...step.payload.luma_sequence];
     state.serviceEvidence.active_light = { skipped: true };
-    el.lightMetric.textContent = "skipped";
+    el.lightMetric.textContent = "пропущено";
   }
   if (id === "gesture") {
     state.gestureDone = false;
     state.gestureAttempt = { detector: "skipped", observed_action: null, confidence: 0 };
     state.serviceEvidence.gesture = { skipped: true };
-    el.gestureMetric.textContent = "skipped";
+    el.gestureMetric.textContent = "пропущено";
   }
   if (id === "rppg") {
     state.pulse = { bpm: null, signal_quality: null };
     state.serviceEvidence.rppg = { skipped: true };
-    el.pulseMetric.textContent = "skipped";
+    el.pulseMetric.textContent = "пропущено";
   }
   if (id === "audio") {
     state.audio = { duration_seconds: 0 };
     state.serviceEvidence.audio = { skipped: true };
-    el.audioMetric.textContent = "skipped";
+    el.audioMetric.textContent = "пропущено";
   }
 }
 
@@ -885,14 +919,14 @@ function getPulseValues() {
 
 async function recordVideoBlob(durationMs) {
   if (!state.stream) {
-    throw new Error("Camera stream is required for gesture recording");
+    throw new Error("Для записи жеста требуется поток камеры");
   }
   return recordStreamBlob(state.stream, durationMs);
 }
 
 async function captureCameraPngBlob(maxWidth) {
   if (!state.stream || el.camera.readyState < 2) {
-    throw new Error("Camera stream is required for frame capture");
+    throw new Error("Для захвата кадра требуется поток камеры");
   }
   const canvas = document.createElement("canvas");
   let width = el.camera.videoWidth || 640;
@@ -908,7 +942,7 @@ async function captureCameraPngBlob(maxWidth) {
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (blob) resolve(blob);
-      else reject(new Error("Could not encode camera frame"));
+      else reject(new Error("Не удалось закодировать кадр камеры"));
     }, "image/png");
   });
 }
@@ -928,7 +962,7 @@ async function recordStreamBlob(stream, durationMs) {
     recorder.ondataavailable = (event) => {
       if (event.data && event.data.size) chunks.push(event.data);
     };
-    recorder.onerror = () => reject(recorder.error || new Error("MediaRecorder failed"));
+    recorder.onerror = () => reject(recorder.error || new Error("Сбой MediaRecorder"));
     recorder.onstop = () => resolve(new Blob(chunks, { type: recorder.mimeType || "video/webm" }));
     recorder.start();
     window.setTimeout(() => {
