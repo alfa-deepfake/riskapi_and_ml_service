@@ -48,7 +48,10 @@ class ClassifierEvidence(BaseModel):
     threshold: float | None = Field(default=None, ge=0.0, le=1.0)
     model_name: str | None = None
     model_scores: dict[str, float] | None = None
-    dropped_models: list[str] | None = None
+    cnn_probability: float | None = Field(default=None, ge=0.0, le=1.0)
+    condition: str | None = None
+    low_info: bool | None = None
+    upsample_diff: float | None = Field(default=None, ge=0.0)
     frame_count: int | None = Field(default=None, ge=0)
     face_present: bool | None = None
     face_confidence: float | None = Field(default=None, ge=0.0, le=1.0)

@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from ml_service.api.routes import router
 from ml_service.config import settings
 from ml_service.services.audio_service import warm_asr_model
+from ml_service.services.classifier_service import warm_video_model
 from ml_service.services.rppg_service import warm_rppg_model
 
 
@@ -20,6 +21,8 @@ async def _lifespan(_app: FastAPI):
     # Faster-Whisper medium is loaded once in the background so the first
     # phrase challenge only pays transcription latency.
     threading.Thread(target=warm_asr_model, daemon=True).start()
+    # The v15 Noise-CNN folds take ~25s to construct on CPU.
+    threading.Thread(target=warm_video_model, daemon=True).start()
     yield
 
 

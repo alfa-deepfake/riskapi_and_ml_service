@@ -13,7 +13,7 @@ from ml_service.core.challenge import ChallengePlan
 from ml_service.core.math_utils import best_lagged_correlation, clamp01, levenshtein_ratio
 
 
-def score_classifier(evidence: ClassifierEvidence | None, min_face_px: float = 0.0) -> CheckScore:
+def score_classifier(evidence: ClassifierEvidence | None) -> CheckScore:
     if evidence is not None and evidence.skipped:
         return _skipped("classifier", 0.25)
     if evidence is not None and evidence.face_present is False:
@@ -36,33 +36,9 @@ def score_classifier(evidence: ClassifierEvidence | None, min_face_px: float = 0
             reason="frame classifier evidence is missing",
         )
 
-    # The XGB features are forensic high-frequency statistics of a 512px face
-    # crop. A face captured smaller than that is upscaled by norm_crop, which
-    # fabricates exactly the smoothing signature the models flag as fake —
-    # train/face_crop.py requires callers to gate verdicts on the source size.
-    if evidence.face_size_px is not None and evidence.face_size_px < min_face_px:
-        return CheckScore(
-            name="classifier",
-            status="unknown",
-            risk=0.50,
-            confidence=0.0,
-            weight=0.25,
-            reason=(
-                f"face too small for forensic features ({evidence.face_size_px:.0f}px < "
-                f"{min_face_px:.0f}px source): upscaled crop fabricates the fake signature"
-            ),
-            details={
-                "face_size_px": evidence.face_size_px,
-                "min_face_px": min_face_px,
-                "fake_probability": evidence.fake_probability,
-                "model_scores": evidence.model_scores,
-            },
-        )
-
     risk = clamp01(evidence.fake_probability)
     confidence = evidence.confidence if evidence.confidence is not None else max(risk, 1.0 - risk)
     fail_threshold = evidence.threshold if evidence.threshold is not None else 0.70
-    status = "failed" if risk >= fail_threshold else "passed"
     details = {
         "model_name": evidence.model_name,
         "frame_count": evidence.frame_count,
@@ -71,13 +47,45 @@ def score_classifier(evidence: ClassifierEvidence | None, min_face_px: float = 0
         "feature_count": evidence.feature_count,
         "preprocessing": evidence.preprocessing,
         "face_size_px": evidence.face_size_px,
+        "condition": evidence.condition,
+        "low_info": evidence.low_info,
+        "cnn_probability": evidence.cnn_probability,
+        "upsample_diff": evidence.upsample_diff,
     }
     if evidence.model_scores is not None:
         details["model_scores"] = evidence.model_scores
-        details["dropped_models"] = evidence.dropped_models
+
+    # v15 REJECT policy: AI restoration/upscaling on the input (GFPGAN and
+    # kin) hides swap traces and is itself disallowed for a bank check.
+    if evidence.condition == "restored":
+        return CheckScore(
+            name="classifier",
+            status="failed",
+            risk=max(risk, 0.85),
+            confidence=clamp01(confidence),
+            weight=0.25,
+            reason="AI restoration/upscaling detected on the input — rejected",
+            details=details,
+        )
+
+    # v15 asymmetric low-info gate: a small (<180px) or wholly-upscaled face
+    # fabricates the generator HF-loss signature via our own resampling, so a
+    # FAKE verdict is withheld (false accusation is the costly error) while a
+    # REAL verdict passes annotated in the details.
+    if evidence.low_info and risk >= fail_threshold:
+        return CheckScore(
+            name="classifier",
+            status="unknown",
+            risk=0.50,
+            confidence=0.0,
+            weight=0.25,
+            reason="low-detail input — fake verdict withheld (signal unreliable)",
+            details=details,
+        )
+
     return CheckScore(
         name="classifier",
-        status=status,
+        status="failed" if risk >= fail_threshold else "passed",
         risk=risk,
         confidence=clamp01(confidence),
         weight=0.25,

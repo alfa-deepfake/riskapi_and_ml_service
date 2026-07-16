@@ -30,7 +30,7 @@ class ClassifierDetector:
     name = "classifier"
 
     def evaluate(self, request: ScoreRequest, context: DetectionContext) -> CheckScore:
-        return score_classifier(request.evidence.classifier, context.settings.video_min_face_px)
+        return score_classifier(request.evidence.classifier)
 
 
 class ActiveLightDetector:

@@ -699,12 +699,14 @@ function classifierSummary(analysis) {
   const evidence = analysis.evidence || {};
   const parts = [];
   if (evidence.fake_probability != null) parts.push(`p_fake ${fmt(evidence.fake_probability)}`);
+  if (evidence.cnn_probability != null) parts.push(`cnn ${fmt(evidence.cnn_probability)}`);
   if (evidence.model_scores && evidence.threshold != null) {
     const scores = Object.values(evidence.model_scores);
     const fakeVotes = scores.filter((score) => score >= evidence.threshold).length;
-    parts.push(`${fakeVotes}/${scores.length} models vote fake`);
+    parts.push(`${fakeVotes}/${scores.length} trees vote fake`);
   }
-  if (evidence.dropped_models?.length) parts.push(`ignored: ${evidence.dropped_models.join(", ")}`);
+  if (evidence.condition && evidence.condition !== "clean") parts.push(evidence.condition);
+  if (evidence.low_info) parts.push("low detail");
   return metricText(analysis.status, parts);
 }
 
