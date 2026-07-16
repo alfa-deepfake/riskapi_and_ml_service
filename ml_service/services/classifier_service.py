@@ -36,22 +36,15 @@ class ClassifierService:
 
         detected_face_present = result.get("face_present")
         detected_face_confidence = result.get("face_confidence")
+        passthrough = (
+            "fake_probability", "confidence", "threshold", "model_name", "model_scores",
+            "cnn_probability", "condition", "low_info", "upsample_diff", "frame_count",
+            "feature_count", "preprocessing", "face_size_px",
+        )
         evidence = ClassifierEvidence(
-            fake_probability=result.get("fake_probability"),
-            confidence=result.get("confidence"),
-            threshold=result.get("threshold"),
-            model_name=result.get("model_name"),
-            model_scores=result.get("model_scores"),
-            cnn_probability=result.get("cnn_probability"),
-            condition=result.get("condition"),
-            low_info=result.get("low_info"),
-            upsample_diff=result.get("upsample_diff"),
-            frame_count=result.get("frame_count"),
+            **{field: result.get(field) for field in passthrough},
             face_present=detected_face_present if detected_face_present is not None else face_present,
             face_confidence=detected_face_confidence if detected_face_confidence is not None else face_confidence,
-            feature_count=result.get("feature_count"),
-            preprocessing=result.get("preprocessing"),
-            face_size_px=result.get("face_size_px"),
         )
         check = score_classifier(evidence)
         return service_response(self.name, evidence, check)

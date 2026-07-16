@@ -898,12 +898,8 @@ async function recordStreamBlob(stream, durationMs) {
       // video classifier scores; ask for more (ignored on audio-only streams).
       recorder = new MediaRecorder(stream, { videoBitsPerSecond: 6_000_000 });
     } catch (error) {
-      try {
-        recorder = new MediaRecorder(stream);
-      } catch (fallbackError) {
-        reject(fallbackError);
-        return;
-      }
+      reject(error);
+      return;
     }
     recorder.ondataavailable = (event) => {
       if (event.data && event.data.size) chunks.push(event.data);
