@@ -964,13 +964,16 @@ pre {
   fill: var(--text);
 }
 
-.chart .bar rect {
-  fill: var(--accent-vivid);
-  transition: opacity var(--dur-snap) var(--ease-standard);
+/* пустые треки: метрики ещё не собраны, никаких выдуманных значений */
+.chart .track rect {
+  fill: rgba(255, 255, 255, 0.05);
 }
 
-.chart .bar:hover rect {
-  opacity: 0.8;
+.chart .empty-note {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  fill: var(--text-muted);
+  text-anchor: middle;
 }
 
 .chart figcaption {
