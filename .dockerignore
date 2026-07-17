@@ -5,6 +5,9 @@ __pycache__
 *.pyo
 *.pt
 *.zip
+*.tar.gz
 dist
+# Git history (incl. LFS objects) is gigabytes — no image needs it.
+.git
 # All model weights are mounted at runtime; never send them to docker build.
 models/
