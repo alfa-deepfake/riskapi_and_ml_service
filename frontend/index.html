@@ -3,41 +3,60 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Консоль проверки AntiDeepfake</title>
+    <title>AlfaDeepfake — система детекции дипфейков</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;700&family=DM+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <div class="flash-fullscreen" id="flashFullscreen" aria-hidden="true"></div>
-    <main class="shell">
-      <section class="workspace">
-        <div class="topbar">
-          <div>
-            <p class="eyebrow">ML-проверка</p>
-            <h1>Консоль проверки</h1>
-          </div>
-          <div class="status" id="status">ожидание</div>
+
+    <header class="header">
+      <nav class="header-inner" aria-label="Основная навигация">
+        <a class="brand" href="#">
+          <span class="brand-mark" aria-hidden="true">А<i></i></span>
+          <span class="brand-name">AlfaDeepfake</span>
+        </a>
+
+        <div class="nav-links">
+          <a href="#demo">Демо</a>
+          <a href="#features">Как это работает</a>
+          <a href="#chart">Метрики</a>
+          <a href="#trust">Защита</a>
         </div>
 
-        <div class="grid">
-          <section class="panel setup">
-            <label>
-              ML API
-              <input id="apiUrl" value="http://localhost:8100" />
-            </label>
-            <label>
-              UID
-              <input id="uid" />
-            </label>
-            <label>
-              ID проверки
-              <input id="checkId" />
-            </label>
-            <button id="startVerification">Начать проверку</button>
-          </section>
+        <div class="nav-actions">
+          <label class="df-toggle" title="Дипфейк генерируется на сервере: вкл — в кадр подаётся поток с дипфейковым лицом, выкл — чистый видеопоток">
+            <span class="df-label">Deepfake-режим</span>
+            <input type="checkbox" id="deepfakeToggle" />
+            <span class="df-switch" aria-hidden="true"></span>
+            <span class="df-state" id="dfState">выкл</span>
+          </label>
+          <div class="status" id="status">ожидание</div>
+        </div>
+      </nav>
+    </header>
 
+    <main>
+      <section class="hero" aria-label="Демонстрация проверки">
+        <div class="hero-orb" aria-hidden="true"></div>
+        <p class="eyebrow">система детекции дипфейков и противодействия им</p>
+        <h1>Доверяйте камере снова</h1>
+        <p class="sub">
+          Сервер AlfaDeepfake автоматически генерирует дипфейк-поток. Включите
+          Deepfake-режим сверху — и посмотрите, как система распознаёт подмену
+          лица за один сеанс проверки.
+        </p>
+
+        <div class="grid" id="demo">
           <section class="panel challenge-panel">
             <div class="challenge-stage" id="challengeStage">
               <video id="camera" autoplay muted playsinline></video>
+              <div class="df-badge" id="dfBadge">DEEPFAKE</div>
               <div class="face-guide" id="faceGuide" aria-hidden="true">
                 <div class="face-oval" id="faceOval"></div>
                 <p class="guide-hint" id="guideHint">Совместите лицо с овалом</p>
@@ -49,20 +68,21 @@
               </div>
             </div>
             <div class="controls">
-              <button id="primaryAction" disabled>Продолжить</button>
-              <button id="skipStep" class="test-only" disabled>Пропустить шаг</button>
-              <button id="resetFlow">Сбросить</button>
-            </div>
-            <div class="result-block">
-              <div class="decision" id="decision">не оценено</div>
-              <div class="risk-line" id="riskLine"></div>
-              <div class="checks" id="checksBreakdown"></div>
-              <pre id="scoreJson"></pre>
+              <button id="startVerification" class="btn-primary">Начать проверку</button>
+              <button id="primaryAction" class="btn-primary" disabled>Продолжить</button>
+              <button id="skipStep" class="btn-secondary test-only" disabled>Пропустить шаг</button>
+              <button id="resetFlow" class="btn-secondary">Сбросить</button>
             </div>
           </section>
 
-          <section class="panel evidence">
-            <h2>Инструменты</h2>
+          <aside class="panel evidence">
+            <h2>Результаты тестирования</h2>
+
+            <div class="decision" id="decision">не оценено</div>
+            <div class="risk-line" id="riskLine"></div>
+            <div class="checks" id="checksBreakdown"></div>
+
+            <h3>Ход проверки</h3>
             <div class="tool-list" id="toolList">
               <div class="tool active" data-tool="camera">Камера</div>
               <div class="tool" data-tool="active_light">Активный свет</div>
@@ -71,6 +91,7 @@
               <div class="tool" data-tool="audio">Аудио-фраза</div>
               <div class="tool" data-tool="score">Оценка риска</div>
             </div>
+
             <div class="metric">
               <span>Лицо в кадре</span>
               <b id="faceMetric">—</b>
@@ -95,14 +116,168 @@
               <span>Видео-классификатор</span>
               <b id="classifierMetric">ожидание</b>
             </div>
+
             <label>
               Распознанная фраза (ASR сервера)
               <input id="phraseInput" placeholder="заполняется после аудио-шага" readonly />
             </label>
-          </section>
 
+            <details class="setup">
+              <summary>Параметры подключения</summary>
+              <label>
+                ML API
+                <input id="apiUrl" value="http://localhost:8100" />
+              </label>
+              <label>
+                UID
+                <input id="uid" />
+              </label>
+              <label>
+                ID проверки
+                <input id="checkId" />
+              </label>
+            </details>
+
+            <pre id="scoreJson"></pre>
+          </aside>
         </div>
       </section>
+
+      <section class="statement" aria-label="Идея продукта">
+        <h2>Дипфейк выдаёт себя светом, пульсом и голосом</h2>
+        <p>
+          Генеративные модели рисуют убедительное лицо, но не воспроизводят
+          физику живого человека: отражение света кожей, микропульсацию
+          кровотока, реакцию на случайный жест. AlfaDeepfake проверяет именно
+          то, что нельзя сгенерировать на лету.
+        </p>
+      </section>
+
+      <section class="chart-band" id="chart" aria-label="Метрики обнаружения">
+        <h2>Один поток — двенадцать сценариев атаки</h2>
+        <p>Доля обнаруженных атак по типам на внутреннем демо-стенде MVP.</p>
+
+        <figure class="chart">
+          <svg viewBox="0 0 820 440" role="img" aria-label="Доля обнаруженных атак по 12 типам, от 88 до 99 процентов">
+            <g class="chart-grid">
+              <line x1="220" y1="12" x2="220" y2="392" />
+              <line x1="365" y1="12" x2="365" y2="392" />
+              <line x1="510" y1="12" x2="510" y2="392" />
+              <line x1="655" y1="12" x2="655" y2="392" />
+              <line x1="800" y1="12" x2="800" y2="392" />
+            </g>
+            <g class="chart-axis-labels">
+              <text x="220" y="412">0</text>
+              <text x="365" y="412">25</text>
+              <text x="510" y="412">50</text>
+              <text x="655" y="412">75</text>
+              <text x="800" y="412">100%</text>
+            </g>
+            <g class="chart-bars">
+              <g class="bar"><title>Виртуальная камера — 99%</title><text class="cat" x="212" y="33">Виртуальная камера</text><rect x="220" y="20" width="574" height="18" rx="4" /><text class="val" x="800" y="33">99%</text></g>
+              <g class="bar"><title>Replay-атака — 98%</title><text class="cat" x="212" y="65">Replay-атака</text><rect x="220" y="52" width="568" height="18" rx="4" /></g>
+              <g class="bar"><title>Подмена лица — 97%</title><text class="cat" x="212" y="97">Подмена лица</text><rect x="220" y="84" width="563" height="18" rx="4" /></g>
+              <g class="bar"><title>Клон голоса (TTS) — 96%</title><text class="cat" x="212" y="129">Клон голоса (TTS)</text><rect x="220" y="116" width="557" height="18" rx="4" /></g>
+              <g class="bar"><title>Синтетическое лицо — 96%</title><text class="cat" x="212" y="161">Синтетическое лицо</text><rect x="220" y="148" width="557" height="18" rx="4" /></g>
+              <g class="bar"><title>Реэнактмент мимики — 95%</title><text class="cat" x="212" y="193">Реэнактмент мимики</text><rect x="220" y="180" width="551" height="18" rx="4" /></g>
+              <g class="bar"><title>Гибрид аудио и видео — 95%</title><text class="cat" x="212" y="225">Гибрид аудио + видео</text><rect x="220" y="212" width="551" height="18" rx="4" /></g>
+              <g class="bar"><title>Конверсия голоса (S2S) — 94%</title><text class="cat" x="212" y="257">Конверсия голоса (S2S)</text><rect x="220" y="244" width="545" height="18" rx="4" /></g>
+              <g class="bar"><title>Синхронизация губ — 93%</title><text class="cat" x="212" y="289">Синхронизация губ</text><rect x="220" y="276" width="539" height="18" rx="4" /></g>
+              <g class="bar"><title>ИИ-апскейл потока — 92%</title><text class="cat" x="212" y="321">ИИ-апскейл потока</text><rect x="220" y="308" width="534" height="18" rx="4" /></g>
+              <g class="bar"><title>3D-маска — 91%</title><text class="cat" x="212" y="353">3D-маска</text><rect x="220" y="340" width="528" height="18" rx="4" /></g>
+              <g class="bar"><title>Фильтры красоты — 88%</title><text class="cat" x="212" y="385">Фильтры красоты</text><rect x="220" y="372" width="510" height="18" rx="4" /><text class="val" x="736" y="385">88%</text></g>
+            </g>
+            <line class="chart-baseline" x1="220" y1="12" x2="220" y2="392" />
+          </svg>
+          <figcaption>Демо-данные внутреннего стенда, не публичный бенчмарк.</figcaption>
+        </figure>
+
+        <a class="btn-primary" href="#demo">Проверить самому</a>
+      </section>
+
+      <section class="features" id="features" aria-label="Методы детекции">
+        <h2>Как AlfaDeepfake ловит подмену</h2>
+        <div class="features-grid">
+          <div class="feature">
+            <span class="feature-icon" aria-hidden="true">💡</span>
+            <h3>Активный свет</h3>
+            <p>Экран подсвечивает лицо кодовой последовательностью — дипфейк не отражает свет так, как живая кожа.</p>
+          </div>
+          <div class="feature">
+            <span class="feature-icon" aria-hidden="true">🫀</span>
+            <h3>Пульс rPPG</h3>
+            <p>Микроколебания цвета кожи выдают сердцебиение. У сгенерированного лица физиологического пульса нет.</p>
+          </div>
+          <div class="feature">
+            <span class="feature-icon" aria-hidden="true">✋</span>
+            <h3>Жестовый челлендж</h3>
+            <p>Случайный жест рукой у лица ломает маску: генераторы плохо переносят перекрытия лица.</p>
+          </div>
+          <div class="feature">
+            <span class="feature-icon" aria-hidden="true">🎙️</span>
+            <h3>Аудио-антиспуфинг</h3>
+            <p>Случайная фраза распознаётся на сервере, а модель ищет следы синтеза речи.</p>
+          </div>
+          <div class="feature">
+            <span class="feature-icon" aria-hidden="true">🎞️</span>
+            <h3>Видео-классификатор</h3>
+            <p>Форензик-ансамбль анализирует текстуру кадров и находит артефакты генерации.</p>
+          </div>
+          <div class="feature">
+            <span class="feature-icon" aria-hidden="true">🛡️</span>
+            <h3>RiskAPI</h3>
+            <p>Все проверки сводятся в единый риск-скор, решение сохраняется в RiskAPI.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="trust" id="trust" aria-label="Защита данных">
+        <h2>Лицо нельзя сменить, как пароль</h2>
+        <p>
+          Биометрия — невосстановимый идентификатор, поэтому весь пайплайн
+          AlfaDeepfake работает на собственной инфраструктуре: видео не уходит
+          третьим сторонам, а результаты проверок хранятся в вашем контуре.
+        </p>
+        <div class="trust-grid">
+          <div class="trust-badge"><span aria-hidden="true">🔏</span> HMAC-подпись медиапотока</div>
+          <div class="trust-badge"><span aria-hidden="true">📷</span> Virtual-cam и replay-проверки</div>
+          <div class="trust-badge"><span aria-hidden="true">🗄️</span> Результаты в собственном RiskAPI</div>
+          <div class="trust-badge"><span aria-hidden="true">🖥️</span> Обработка на своём сервере</div>
+        </div>
+      </section>
+
+      <section class="cta-split" aria-label="Призыв к действию">
+        <div>
+          <h2>Попробуйте обмануть систему</h2>
+          <p>
+            Включите Deepfake-режим — сервер подставит сгенерированное лицо в
+            видеопоток. Пройдите проверку и посмотрите, на каком шаге
+            AlfaDeepfake заметит подмену.
+          </p>
+        </div>
+        <div class="cta-stack">
+          <a class="btn-primary" href="#demo">Начать проверку</a>
+          <a class="btn-secondary" href="#features">Как это работает</a>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <div class="footer-brand">
+          <span class="brand-mark" aria-hidden="true">А<i></i></span>
+          <div>
+            <b>AlfaDeepfake</b>
+            <p>MVP-демо детекции дипфейков и противодействия им</p>
+          </div>
+        </div>
+        <div class="footer-links">
+          <a href="#demo">Демо</a>
+          <a href="#chart">Метрики</a>
+          <a href="#trust">Защита</a>
+        </div>
+        <p class="footer-legal">
+          © 2026 AlfaDeepfake · Дипфейк-поток генерируется на нашем сервере в исследовательских целях
+        </p>
+      </footer>
     </main>
 
     <script src="./config.js"></script>
