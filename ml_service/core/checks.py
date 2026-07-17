@@ -50,12 +50,13 @@ def score_classifier(evidence: ClassifierEvidence | None) -> CheckScore:
         "condition": evidence.condition,
         "low_info": evidence.low_info,
         "cnn_probability": evidence.cnn_probability,
+        "tree_probability": evidence.tree_probability,
         "upsample_diff": evidence.upsample_diff,
     }
     if evidence.model_scores is not None:
         details["model_scores"] = evidence.model_scores
 
-    # v15 REJECT policy: AI restoration/upscaling on the input (GFPGAN and
+    # v16 REJECT policy: AI restoration/upscaling on the input (GFPGAN and
     # kin) hides swap traces and is itself disallowed for a bank check.
     if evidence.condition == "restored":
         return CheckScore(
@@ -68,18 +69,23 @@ def score_classifier(evidence: ClassifierEvidence | None) -> CheckScore:
             details=details,
         )
 
-    # v15 asymmetric low-info gate: a small (<180px) or wholly-upscaled face
-    # fabricates the generator HF-loss signature via our own resampling, so a
-    # FAKE verdict is withheld (false accusation is the costly error) while a
-    # REAL verdict passes annotated in the details.
-    if evidence.low_info and risk >= fail_threshold:
+    # v16 forensic override: on a low-detail input (source face <180px or
+    # wholly upscaled) the noise-CNN modality is physically blind and drags
+    # the fused score toward REAL — when the trees still fire (mean >= t_susp,
+    # 0.75 measured held-out: TPR 95.0->95.1%, FPR 3.56->3.66%) a REAL verdict
+    # is not issued. This replaced the v15 withhold-FAKE gate: the v15b CNN
+    # retrain fixed the false-FAKE modes the withhold guarded against, so a
+    # fused FAKE on low-detail input now stands (annotated via details).
+    tree_mean = evidence.tree_probability
+    t_susp = evidence.t_susp if evidence.t_susp is not None else 0.75
+    if evidence.low_info and risk < fail_threshold and tree_mean is not None and tree_mean >= t_susp:
         return CheckScore(
             name="classifier",
-            status="unknown",
-            risk=0.50,
-            confidence=0.0,
+            status="failed",
+            risk=max(risk, clamp01(tree_mean)),
+            confidence=clamp01(tree_mean),
             weight=0.25,
-            reason="low-detail input — fake verdict withheld (signal unreliable)",
+            reason=f"forensic override: trees {tree_mean:.2f} on low-detail input — REAL verdict withheld",
             details=details,
         )
 

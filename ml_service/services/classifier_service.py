@@ -38,8 +38,8 @@ class ClassifierService:
         detected_face_confidence = result.get("face_confidence")
         passthrough = (
             "fake_probability", "confidence", "threshold", "model_name", "model_scores",
-            "cnn_probability", "condition", "low_info", "upsample_diff", "frame_count",
-            "feature_count", "preprocessing", "face_size_px",
+            "cnn_probability", "tree_probability", "t_susp", "condition", "low_info",
+            "upsample_diff", "frame_count", "feature_count", "preprocessing", "face_size_px",
         )
         evidence = ClassifierEvidence(
             **{field: result.get(field) for field in passthrough},
@@ -93,6 +93,8 @@ _V15_CNN_WEIGHTS = (
 def _get_v15_adapter():
     models_dir = Path(settings.video_v15_dir)
     if not (models_dir / "v15_blend_config.json").exists():
+        return None
+    if not (models_dir / "v16" / "gbm_fusion.ubj").exists():
         return None
     if not all((models_dir / "cnn" / name).exists() for name in _V15_CNN_WEIGHTS):
         return None

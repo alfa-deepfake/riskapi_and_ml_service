@@ -1,18 +1,20 @@
-"""v15 two-modality deepfake ensemble for uploaded challenge video.
+"""v16 two-modality deepfake ensemble for uploaded challenge video.
 
-Ports the training repo's v15 release (see its infer_v15.py / realtime_v15.py):
+Ports the training repo's v16 release (see its infer_v16.py / infer_v15.py):
 per sampled frame an InsightFace-aligned 512px crop is scored by
 
   1. 6 XGBoost v13 trees on 73 forensic/quality features,
   2. a Noise-CNN (5 ConvNeXt-Tiny folds on a 256px residual map, temperature
      scaled, logistic-calibrated),
 
-blended ``p = w_tree*mean(trees) + w_cnn*cnn`` and median-smoothed across
-frames (the realtime pipeline's video treatment). A 5-class condition gate
-classifies the input (clean/degraded/restored/vidcall/vidcall_ff) and the
-asymmetric low-info gate (face < 180px source or wholly-upscaled input) marks
-frames whose fake signature may be fabricated by our own resampling; the
-verdict policy on both lives in ``ml_service.core.checks.score_classifier``.
+fused by a depth-2 GBM over ``[tmean, cnn, cnn_std, tree_std]`` (per image it
+decides how much to trust each modality — a lone confident CNN with high fold
+spread is discounted) and median-smoothed across frames. A 5-class condition
+gate classifies the input (clean/degraded/restored/vidcall/vidcall_ff) and the
+low-info gate (face < 180px source or wholly-upscaled input) marks frames
+where the noise modality is blind; the verdict policy on both — including the
+v16 forensic override (trees ≥ t_susp on low-detail input never verdict REAL)
+— lives in ``ml_service.core.checks.score_classifier``.
 
 Heavy imports live at module level; the module itself is imported lazily by
 ``classifier_service`` and skipped when ML dependencies are absent.
@@ -110,8 +112,8 @@ class V15VideoAdapter:
 
         face_sizes = [f["face_px"] for f in frames if f["face_px"] is not None]
         result: dict[str, Any] = {
-            "threshold": st["blend"]["t_bin"],
-            "model_name": "v15-xgb6+noise-cnn5",
+            "threshold": st["fusion_cfg"]["t_bin"],
+            "model_name": "v16-xgb6+noise-cnn5+gbm",
             "frame_count": frame_count,
             "face_present": bool(frames),
             "face_confidence": len(frames) / examined if examined else 0.0,
@@ -128,7 +130,7 @@ class V15VideoAdapter:
         face_px = result["face_size_px"]
         upsample_diff = float(np.median([f["upsample_diff"] for f in frames]))
         low_info = (face_px is not None and face_px < MIN_FACE_PX) or upsample_diff < MIN_UPSAMPLE_DIFF
-        borderline = st["blend"]["t_lo"] < p < st["blend"]["t_hi"]
+        borderline = st["fusion_cfg"]["t_lo"] < p < st["fusion_cfg"]["t_hi"]
         result.update(
             {
                 "fake_probability": p,
@@ -138,6 +140,8 @@ class V15VideoAdapter:
                     name: float(np.mean([f["trees"][name] for f in frames])) for name in ["id"] + GENS
                 },
                 "cnn_probability": float(np.median([f["cnn_p"] for f in frames])),
+                "tree_probability": float(np.median([f["tmean"] for f in frames])),
+                "t_susp": st["blend"].get("t_susp", 0.75),
                 "condition": Counter(f["cond"] for f in frames).most_common(1)[0][0],
                 "low_info": low_info,
                 "upsample_diff": upsample_diff,
@@ -153,18 +157,30 @@ class V15VideoAdapter:
         matrix = xgboost.DMatrix(row, feature_names=st["feat_names"])
         trees = {name: float(booster.predict(matrix)[0]) for name, booster in st["trees"].items()}
         cond_p = st["gate"].predict(matrix)[0]
-        cnn_p = self._cnn_score(st, Image.fromarray(crop_rgb))
-        p = st["blend"]["w_tree"] * float(np.mean(list(trees.values()))) + st["blend"]["w_cnn"] * cnn_p
+        cnn_p, cnn_std = self._cnn_score(st, Image.fromarray(crop_rgb))
+        ts = np.array(list(trees.values()), dtype=np.float32)
+        fusion_row = {
+            "tmean": float(ts.mean()),
+            "cnn": cnn_p,
+            "cnn_std": cnn_std,
+            "tree_std": float(ts.std(ddof=1)),
+        }
+        names = st["fusion_cfg"]["inputs"]
+        x = xgboost.DMatrix(
+            np.array([[fusion_row[k] for k in names]], dtype=np.float32), feature_names=names
+        )
         return {
-            "p": p,
+            "p": float(st["fusion"].predict(x)[0]),
             "trees": trees,
+            "tmean": fusion_row["tmean"],
             "cnn_p": cnn_p,
             "cond": COND_NAMES[int(np.argmax(cond_p))],
             "upsample_diff": feats.get("upsample_diff_256", 99.0),
         }
 
     @staticmethod
-    def _cnn_score(st: dict[str, Any], im_pil: Image.Image) -> float:
+    def _cnn_score(st: dict[str, Any], im_pil: Image.Image) -> tuple[float, float]:
+        """Calibrated fold-ensemble probability and the raw fold spread."""
         x = noise_map_tensor(im_pil, st["cnn_size"]).unsqueeze(0)
         ps = []
         with torch.no_grad():
@@ -173,7 +189,8 @@ class V15VideoAdapter:
                 ps.append(1.0 / (1.0 + np.exp(-np.clip(logit, -40, 40))))
         mean_p = float(np.mean(ps))
         logit = np.log(np.clip(mean_p, 1e-6, 1 - 1e-6) / np.clip(1 - mean_p, 1e-6, 1))
-        return float(st["calibrator"].predict_proba(np.array([[logit]]))[:, 1][0])
+        cal_p = float(st["calibrator"].predict_proba(np.array([[logit]]))[:, 1][0])
+        return cal_p, float(np.std(ps))
 
     def load(self) -> dict[str, Any]:
         """Load and cache all models (the CNN folds take seconds on CPU).
@@ -191,9 +208,13 @@ class V15VideoAdapter:
     def _build_state(self) -> dict[str, Any]:
         v13_dir = self.models_dir / "v13"
         cnn_dir = self.models_dir / "cnn"
+        v16_dir = self.models_dir / "v16"
         feat_names = (v13_dir / "feature_names.txt").read_text().splitlines()
         tree_prefix = json.loads((v13_dir / "v13_config.json").read_text())["tree_prefix"]
         blend = json.loads((self.models_dir / "v15_blend_config.json").read_text())
+        fusion_cfg = json.loads((v16_dir / "v16_fusion_config.json").read_text())
+        fusion = xgboost.Booster()
+        fusion.load_model(str(v16_dir / "gbm_fusion.ubj"))
 
         trees: dict[str, xgboost.Booster] = {}
         for name in ["id"] + GENS:
@@ -225,6 +246,8 @@ class V15VideoAdapter:
             "trees": trees,
             "gate": gate,
             "blend": blend,
+            "fusion": fusion,
+            "fusion_cfg": fusion_cfg,
             "cnn_folds": folds,
             "calibrator": calibrator,
             "cnn_size": int(cnn_cfg["size"]),

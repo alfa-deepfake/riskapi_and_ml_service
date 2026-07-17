@@ -49,6 +49,8 @@ class ClassifierEvidence(BaseModel):
     model_name: str | None = None
     model_scores: dict[str, float] | None = None
     cnn_probability: float | None = Field(default=None, ge=0.0, le=1.0)
+    tree_probability: float | None = Field(default=None, ge=0.0, le=1.0)
+    t_susp: float | None = Field(default=None, ge=0.0, le=1.0)
     condition: str | None = None
     low_info: bool | None = None
     upsample_diff: float | None = Field(default=None, ge=0.0)

@@ -51,10 +51,11 @@ bash scripts/download_runtime_models.sh
 ```
 
 Она скачивает модели в `models/asr/faster-whisper-medium/` и
-`models/insightface/models/buffalo_l/`. Деревья/гейт/калибратор v15 уже
-закоммичены в `models/v15/`; веса Noise-CNN (`models/v15/cnn/*.pt`, 5×111МБ)
-и WavLM-чекпоинт (`models/audio/`) копируются на хост отдельно (scp из
-релизного бандла `v15_release`).
+`models/insightface/models/buffalo_l/`. Деревья/гейт/GBM-слияние v16/калибратор
+уже закоммичены в `models/v15/`; веса Noise-CNN (`models/v15/cnn/*.pt`,
+5×111МБ) и WavLM-чекпоинт (`models/audio/`) трекаются через Git LFS — при
+чекауте без LFS копируются на хост отдельно (scp из релизного бандла
+`v16_release`, `cnn/artifacts_v15b/noise_cnn_global/`).
 
 ```bash
 docker compose up -d --build      # собрать образы и поднять в фоне

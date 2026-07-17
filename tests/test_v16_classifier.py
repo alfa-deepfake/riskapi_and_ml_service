@@ -6,17 +6,18 @@ from ml_service.api.schemas import ClassifierEvidence
 from ml_service.core.checks import score_classifier
 
 MODELS_DIR = Path(__file__).resolve().parent.parent / "models" / "v15"
-T_BIN = 0.5940805446666666  # models/v15/v15_blend_config.json
+T_BIN = 0.6498336791992188  # models/v15/v16/v16_fusion_config.json
+T_SUSP = 0.75  # models/v15/v15_blend_config.json
 
 
-def test_classifier_fails_at_blend_threshold():
-    check = score_classifier(ClassifierEvidence(fake_probability=0.60, threshold=T_BIN))
+def test_classifier_fails_at_fusion_threshold():
+    check = score_classifier(ClassifierEvidence(fake_probability=0.66, threshold=T_BIN))
     assert check.status == "failed"
     assert check.details["threshold"] == T_BIN
 
 
-def test_classifier_passes_below_blend_threshold():
-    check = score_classifier(ClassifierEvidence(fake_probability=0.55, threshold=T_BIN))
+def test_classifier_passes_below_fusion_threshold():
+    check = score_classifier(ClassifierEvidence(fake_probability=0.60, threshold=T_BIN))
     assert check.status == "passed"
 
 
@@ -29,19 +30,44 @@ def test_restored_condition_is_rejected_even_when_score_is_low():
     assert "restoration" in check.reason
 
 
-def test_low_info_fake_verdict_is_withheld():
-    # A small/upscaled face fabricates the fake signature — never confidently
-    # accuse on it (the v15 asymmetric gate).
+def test_low_info_fake_verdict_stands():
+    # v16: the verdict is always binary — a fused FAKE on low-detail input is
+    # no longer withheld (the v15b CNN retrain fixed the false-FAKE modes the
+    # old withhold gate guarded against); low_info stays annotated.
     check = score_classifier(
         ClassifierEvidence(fake_probability=0.90, threshold=T_BIN, low_info=True)
     )
-    assert check.status == "unknown"
+    assert check.status == "failed"
     assert check.details["low_info"] is True
 
 
-def test_low_info_real_verdict_passes_annotated():
+def test_low_info_forensic_override_fails_real_verdict():
+    # v16 forensic override: on low-detail input the noise CNN is blind and
+    # drags the fused score under the threshold — trees >= t_susp means no
+    # REAL verdict.
     check = score_classifier(
-        ClassifierEvidence(fake_probability=0.10, threshold=T_BIN, low_info=True)
+        ClassifierEvidence(
+            fake_probability=0.30,
+            threshold=T_BIN,
+            low_info=True,
+            tree_probability=0.80,
+            t_susp=T_SUSP,
+        )
+    )
+    assert check.status == "failed"
+    assert check.risk >= 0.80
+    assert "forensic override" in check.reason
+
+
+def test_low_info_real_verdict_passes_when_trees_are_quiet():
+    check = score_classifier(
+        ClassifierEvidence(
+            fake_probability=0.10,
+            threshold=T_BIN,
+            low_info=True,
+            tree_probability=0.40,
+            t_susp=T_SUSP,
+        )
     )
     assert check.status == "passed"
     assert check.details["low_info"] is True
@@ -72,30 +98,28 @@ def test_classifier_details_include_both_modalities():
     assert check.details["cnn_probability"] == 0.55
 
 
-def test_withheld_fake_verdict_blocks_allow_decision(monkeypatch, tmp_path):
-    # A low-detail-withheld FAKE must route to review even when every hard
-    # liveness check passes — otherwise framing the face small neutralizes
-    # the forensic classifier entirely.
+def test_forensic_override_blocks_allow_decision():
+    # A forensic-override FAKE (v16 low-detail policy) must route to review
+    # even when every hard liveness check passes — otherwise framing the face
+    # small neutralizes the forensic classifier entirely.
     from ml_service.api.schemas import CheckScore
     from ml_service.core.scoring import _decision
 
-    withheld = CheckScore(
-        name="classifier",
-        status="unknown",
-        risk=0.50,
-        confidence=0.0,
-        weight=0.25,
-        reason="low-detail input — fake verdict withheld (signal unreliable)",
-        details={"low_info": True, "fake_probability": 0.90},
+    overridden = score_classifier(
+        ClassifierEvidence(
+            fake_probability=0.30, threshold=T_BIN, low_info=True,
+            tree_probability=0.80, t_susp=T_SUSP,
+        )
     )
+    assert overridden.status == "failed"
     passing = [
         CheckScore(name=name, status="passed", risk=0.10, confidence=0.9, weight=0.2, reason="ok")
         for name in ("active_light", "rppg", "gesture", "audio")
     ]
-    decision = _decision([withheld, *passing], 0.20, allow_threshold=0.35, deny_threshold=0.72)
+    decision = _decision([overridden, *passing], 0.20, allow_threshold=0.35, deny_threshold=0.72)
     assert decision == "review"
 
-    # A merely-missing classifier (no low_info) keeps the old behavior.
+    # A merely-missing classifier keeps the old behavior.
     missing = CheckScore(
         name="classifier", status="unknown", risk=0.45, confidence=0.0, weight=0.25,
         reason="frame classifier evidence is missing",
@@ -111,7 +135,9 @@ def test_v15_adapter_gate_requires_cnn_weights(monkeypatch, tmp_path):
 
     v15 = tmp_path / "v15"
     (v15 / "cnn").mkdir(parents=True)
+    (v15 / "v16").mkdir()
     (v15 / "v15_blend_config.json").write_text("{}")
+    (v15 / "v16" / "gbm_fusion.ubj").write_bytes(b"stub")
     monkeypatch.setattr(classifier_service.settings, "video_v15_dir", str(v15))
 
     classifier_service._get_v15_adapter.cache_clear()
@@ -206,6 +232,31 @@ def test_trees_and_gate_load_and_score():
     gate.load_model(str(MODELS_DIR / "v13" / "xgb_gate_condition.ubj"))
     cond_p = gate.predict(matrix)[0]
     assert len(cond_p) == len(adapter.COND_NAMES)
+
+
+@pytest.mark.skipif(not MODELS_DIR.exists(), reason="v15/v16 models are not deployed")
+def test_v16_fusion_loads_and_scores():
+    import json
+
+    np = pytest.importorskip("numpy")
+    xgboost = pytest.importorskip("xgboost")
+
+    cfg = json.loads((MODELS_DIR / "v16" / "v16_fusion_config.json").read_text())
+    assert cfg["inputs"] == ["tmean", "cnn", "cnn_std", "tree_std"]
+    assert cfg["t_bin"] == T_BIN
+
+    fusion = xgboost.Booster()
+    fusion.load_model(str(MODELS_DIR / "v16" / "gbm_fusion.ubj"))
+    row = np.array([[0.5, 0.5, 0.1, 0.1]], dtype=np.float32)
+    p = float(fusion.predict(xgboost.DMatrix(row, feature_names=cfg["inputs"]))[0])
+    assert 0.0 <= p <= 1.0
+    # high tmean + high cnn must land clearly fake-side, and above the
+    # low-everything row — pins that the booster is a real fusion, not noise
+    lo = float(fusion.predict(xgboost.DMatrix(
+        np.array([[0.05, 0.05, 0.02, 0.05]], dtype=np.float32), feature_names=cfg["inputs"]))[0])
+    hi = float(fusion.predict(xgboost.DMatrix(
+        np.array([[0.95, 0.95, 0.02, 0.05]], dtype=np.float32), feature_names=cfg["inputs"]))[0])
+    assert lo < cfg["t_bin"] <= hi
 
 
 def test_noise_map_is_deterministic_and_bounded():
