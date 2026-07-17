@@ -64,15 +64,6 @@ def _decision(checks: list[CheckScore], risk_score: float, *, allow_threshold: f
         return "review"
     if any(check.status in ("unknown", "skipped") for check in checks if check.name in hard_checks):
         return "review"
-    # A fake-leaning classifier verdict withheld on low-detail input is the
-    # v15 "UNSURE" band: bundle policy is escalation/recapture, never allow —
-    # otherwise framing the face small (<180px source) neutralizes the one
-    # forensic detector and leaves the decision to the liveness checks alone.
-    if any(
-        check.name == "classifier" and check.status == "unknown" and check.details.get("low_info")
-        for check in checks
-    ):
-        return "review"
     if risk_score <= allow_threshold:
         return "allow"
     return "review"

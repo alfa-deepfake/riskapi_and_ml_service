@@ -72,21 +72,22 @@ Current MVP limitations:
 
 The current production code is adapter-based. Heavy models are optional at service boot:
 
-- Video classifier: primary path is the v15 two-modality ensemble in
-  `models/v15/` (training repo's v15 release). Per sampled frame, a 512×512
+- Video classifier: primary path is the v16 two-modality ensemble in
+  `models/v15/` (training repo's v16 release). Per sampled frame, a 512×512
   InsightFace-aligned crop is scored by 6 XGBoost v13 trees on 73
   forensic/quality features and by a Noise-CNN (5 ConvNeXt-Tiny folds on a
-  256px residual map, temperature-scaled and logistic-calibrated); the scores
-  are blended `p = 0.4·trees + 0.6·cnn` and median-smoothed across frames.
+  256px residual map, temperature-scaled and logistic-calibrated); the two
+  modalities are fused by a depth-2 GBM over `[tmean, cnn, cnn_std, tree_std]`
+  (`models/v15/v16/gbm_fusion.ubj`) and median-smoothed across frames.
   Thresholds (`t_bin` for fake/real, `t_lo`/`t_hi` grey band) ship with the
-  bundle in `v15_blend_config.json` and are not env-tunable. A 5-class
+  bundle in `v16/v16_fusion_config.json` and are not env-tunable. A 5-class
   condition gate classifies the input: `restored` (GFPGAN-like AI processing)
-  is rejected outright; `vidcall*` is annotated. The asymmetric low-info gate
-  withholds FAKE verdicts (status `unknown`) when the source face is <180px
-  or the input is wholly upscaled — such input fabricates the generator
-  HF-loss signature. Models dir is `ML_VIDEO_V15_DIR` (default `models/v15`).
-  When the bundle is absent, the adapter falls back to
-  `neiro_model/video_infer.py` CLIP checkpoints.
+  is rejected outright; `vidcall*` is annotated. On low-detail input (source
+  face <180px or wholly upscaled) the noise modality is blind, so when the
+  trees still fire (mean ≥ `t_susp` from `v15_blend_config.json`) a fused
+  REAL verdict is overridden to failed (v16 forensic override). Models dir is
+  `ML_VIDEO_V15_DIR` (default `models/v15`). When the bundle is absent, the
+  adapter falls back to `neiro_model/video_infer.py` CLIP checkpoints.
 - Audio anti-spoof: WavLM classifier (vendored `deepfake_audio/` inference code,
   4-generator checkpoint at `ML_AUDIO_MODEL_PATH`, default
   `models/audio/wavlm_all4_best.pt`). The checkpoint is git-ignored (380MB) and
@@ -102,9 +103,10 @@ Model weights are not part of the Docker image. Before starting Compose, put
 them in these host paths (all are mounted read-only):
 
 - `models/v15/`: committed with the repo (v13 trees, condition gate, blend
-  config, CNN calibrator) — except `models/v15/cnn/noise_cnn_holdout_*.pt`
-  (5×111MB ConvNeXt fold weights, git-ignored): copy them from the v15
-  release bundle (`cnn/artifacts_v15b/noise_cnn_global/`) via scp;
+  config, v16 GBM fusion, CNN calibrator); the 5×111MB ConvNeXt fold weights
+  `models/v15/cnn/noise_cnn_holdout_*.pt` are tracked via Git LFS — on a
+  checkout without LFS, copy them from the release bundle
+  (`cnn/artifacts_v15b/noise_cnn_global/`) via scp;
 - `models/audio/wavlm_all4_best.pt`: WavLM anti-spoof checkpoint;
 - `models/asr/faster-whisper-medium/`: local CTranslate2 Faster-Whisper model
   (`model.bin`, `config.json`, `tokenizer.json`, `vocabulary.txt`);
@@ -112,7 +114,7 @@ them in these host paths (all are mounted read-only):
   pack required by `train/face_crop.py` for the aligned 512×512 face crop.
 
 The rPPG weights are packaged by the `open-rppg` dependency. The optional CLIP
-fallback, if used instead of the v15 ensemble, also remains external at
+fallback, if used instead of the v16 ensemble, also remains external at
 `models/video/clip_vit_b16_deepfake_best.pt`.
 
 From the repository root, download the ASR and alignment models into those
