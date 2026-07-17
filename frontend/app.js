@@ -6,6 +6,10 @@ const LIGHT_SAMPLE_INTERVAL_MS = Number(appConfig.lightSampleIntervalMs || 70);
 // Generous ceiling: the first rPPG call may wait out the ~1min model warmup
 // on the server. Without a timeout a dropped tunnel hangs the flow forever.
 const REQUEST_TIMEOUT_MS = Number(appConfig.requestTimeoutMs || 120000);
+// The deepfake is generated server-side and delivered through a virtual
+// camera; the toggle switches the page between the clean webcam and the
+// virtual camera whose label matches this substring.
+const DEEPFAKE_CAM_LABEL = String(appConfig.deepfakeCameraLabel || "virtual").toLowerCase();
 
 const FLOW = [
   {
@@ -72,9 +76,13 @@ const state = {
   gestureDone: false,
   pulse: null,
   audio: null,
+  deepfakeMode: false,
 };
 
 const el = {
+  deepfakeToggle: document.querySelector("#deepfakeToggle"),
+  dfState: document.querySelector("#dfState"),
+  dfBadge: document.querySelector("#dfBadge"),
   apiUrl: document.querySelector("#apiUrl"),
   uid: document.querySelector("#uid"),
   checkId: document.querySelector("#checkId"),
@@ -484,16 +492,54 @@ async function runStep(id) {
   if (id === "score") return submitEvidence();
 }
 
-async function startCamera() {
-  setStatus("запрос доступа к камере");
-  // The XGB forensic classifier needs the face near its 512px training crop;
-  // the browser default 640x480 leaves faces ~200px and its verdict gated off.
+// The XGB forensic classifier needs the face near its 512px training crop;
+// the browser default 640x480 leaves faces ~200px and its verdict gated off.
+async function videoConstraints() {
+  const base = { width: { ideal: 1280 }, height: { ideal: 720 } };
+  if (!state.deepfakeMode) return base;
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  const cam = devices.find(
+    (device) => device.kind === "videoinput" && device.label.toLowerCase().includes(DEEPFAKE_CAM_LABEL),
+  );
+  if (!cam) {
+    logLine(`deepfake: виртуальная камера "${DEEPFAKE_CAM_LABEL}" не найдена — используется камера по умолчанию`);
+    return base;
+  }
+  return { ...base, deviceId: { exact: cam.deviceId } };
+}
+
+function updateDeepfakeUi() {
+  el.dfState.textContent = state.deepfakeMode ? "вкл" : "выкл";
+  el.dfBadge.classList.toggle("on", state.deepfakeMode);
+}
+
+async function openCamera() {
   state.stream = await navigator.mediaDevices.getUserMedia({
-    video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+    video: await videoConstraints(),
     audio: false,
   });
   el.camera.srcObject = state.stream;
   await waitForVideo();
+}
+
+el.deepfakeToggle.addEventListener("change", async () => {
+  state.deepfakeMode = el.deepfakeToggle.checked;
+  updateDeepfakeUi();
+  if (!state.stream) return;
+  try {
+    state.stream.getTracks().forEach((track) => track.stop());
+    await openCamera();
+    logLine(`deepfake-режим: ${state.deepfakeMode ? "включён — сервер подаёт дипфейковое лицо" : "выключен — чистый видеопоток"}`);
+    setStatus(`deepfake: ${state.deepfakeMode ? "вкл" : "выкл"}`);
+  } catch (error) {
+    setStatus("ошибка переключения камеры");
+    alert(error.message);
+  }
+});
+
+async function startCamera() {
+  setStatus("запрос доступа к камере");
+  await openCamera();
   el.faceGuide.classList.add("visible");
   await updateFacePresence();
   renderFaceState();
