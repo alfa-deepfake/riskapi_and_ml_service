@@ -208,6 +208,28 @@ button:disabled {
   border-color: var(--accent-cta);
 }
 
+/* nav primary action: sharp-радиус, светло-красный — по промпту */
+.btn-nav {
+  display: inline-grid;
+  place-items: center;
+  min-height: 36px;
+  padding: var(--space-xs) var(--space-md);
+  border-radius: 0;
+  background: var(--accent-cta);
+  color: var(--text-on-mid);
+  font-size: 14px;
+  text-decoration: none;
+  transition: opacity var(--dur-snap) var(--ease-standard), transform var(--dur-snap) var(--ease-standard);
+}
+
+.btn-nav:hover {
+  opacity: 0.88;
+}
+
+.btn-nav:active {
+  transform: scale(0.97);
+}
+
 :is(a, button, input, summary):focus-visible {
   outline: 2px solid var(--accent-cta);
   outline-offset: 3px;
@@ -406,14 +428,15 @@ button:disabled {
   }
 }
 
-.hero > :not(.hero-orb) {
+.hero > :not(.hero-orb):not(.hero-scatter) {
   position: relative;
 }
 
 /* stagger только на копирайтинге: демо-приложение должно быть видно сразу */
 .hero .eyebrow,
 .hero h1,
-.hero .sub {
+.hero .sub,
+.hero .hero-cta {
   animation: rise var(--dur-long) var(--ease-spring) both;
 }
 
@@ -423,6 +446,14 @@ button:disabled {
 
 .hero .sub {
   animation-delay: 160ms;
+}
+
+.hero .hero-cta {
+  animation-delay: 240ms;
+}
+
+.hero-cta {
+  margin-top: var(--space-md);
 }
 
 @keyframes rise {
@@ -453,6 +484,155 @@ button:disabled {
   margin: var(--space-md) auto 0;
   color: var(--text);
   opacity: 0.82;
+}
+
+/* ---------- hero-scatter: тайлы вокруг демо (signature element) ---------- */
+
+.hero-scatter {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.hs-tile {
+  --rot: 0deg;
+  position: absolute;
+  display: grid;
+  gap: var(--space-xs);
+  min-width: 150px;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  color: var(--text-on-light);
+  box-shadow: var(--shadow-card);
+  text-align: left;
+  animation: tile-float 5s ease-in-out infinite alternate;
+}
+
+@keyframes tile-float {
+  from {
+    transform: rotate(var(--rot)) translateY(0);
+  }
+  to {
+    transform: rotate(var(--rot)) translateY(-8px);
+  }
+}
+
+.hs-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted-on-light);
+}
+
+.hs-pill {
+  justify-self: start;
+  padding: 2px var(--space-sm);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: var(--size-small);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text);
+}
+
+.hs-ok {
+  background: var(--ok);
+}
+
+.hs-deny {
+  background: var(--accent-vivid);
+}
+
+.hs-mono {
+  font-family: var(--font-mono);
+  font-size: var(--size-small);
+}
+
+.hs-tile svg {
+  width: 120px;
+  height: 32px;
+  fill: none;
+  stroke: var(--accent-vivid);
+  stroke-width: 2;
+}
+
+.hs-t1 {
+  left: 2.5%;
+  top: 42%;
+  --rot: -6deg;
+}
+
+.hs-t2 {
+  left: 4%;
+  top: 64%;
+  --rot: 4deg;
+  animation-delay: 1.2s;
+}
+
+.hs-t3 {
+  right: 2.5%;
+  top: 40%;
+  --rot: 5deg;
+  animation-delay: 0.6s;
+}
+
+.hs-t4 {
+  right: 4%;
+  top: 66%;
+  --rot: -4deg;
+  animation-delay: 1.8s;
+}
+
+.hs-icon {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  fill: rgba(255, 255, 255, 0.1);
+  stroke: rgba(255, 255, 255, 0.1);
+  stroke-width: 1.5;
+}
+
+.hs-i1 { left: 14%; top: 12%; transform: rotate(-10deg); }
+.hs-i2 { right: 16%; top: 10%; transform: rotate(8deg); }
+.hs-i3 { left: 5%; top: 28%; transform: rotate(6deg); }
+.hs-i4 { right: 5%; top: 26%; transform: rotate(-8deg); }
+.hs-i5 { left: 1%; top: 54%; transform: rotate(12deg); }
+.hs-i6 { right: 1%; top: 56%; transform: rotate(-6deg); }
+
+@media (max-width: 1200px) {
+  .hero-scatter {
+    display: none;
+  }
+}
+
+/* ---------- marquee проверок ---------- */
+
+.marquee {
+  overflow: hidden;
+  border-top: var(--border-dark);
+  border-bottom: var(--border-dark);
+  padding: var(--space-sm) 0;
+  background: var(--surface);
+}
+
+.marquee-track {
+  display: flex;
+  width: max-content;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--size-small);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  animation: marquee 28s linear infinite;
+}
+
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
+  }
 }
 
 /* ---------- демо: видео + результаты ---------- */
