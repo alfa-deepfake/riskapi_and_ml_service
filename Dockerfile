@@ -14,8 +14,12 @@ RUN apt-get update \
 COPY requirements.txt requirements-ml.txt /tmp/
 # CPU torch wheels for the WavLM audio anti-spoof model and the v15 Noise-CNN
 # (timm ConvNeXt); the default PyPI build would drag the full CUDA stack in.
-RUN pip install --no-cache-dir "torch>=2.1,<3" "torchaudio>=2.1,<3" "torchvision>=0.16,<1" --index-url https://download.pytorch.org/whl/cpu \
-    && pip install --no-cache-dir -r /tmp/requirements.txt -r /tmp/requirements-ml.txt
+# The BuildKit cache mount keeps downloaded wheels (incl. the insightface
+# wheel built from source) across dependency bumps; it lives outside the
+# layer, so the image does not grow.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install "torch>=2.1,<3" "torchaudio>=2.1,<3" "torchvision>=0.16,<1" --index-url https://download.pytorch.org/whl/cpu \
+    && pip install -r /tmp/requirements.txt -r /tmp/requirements-ml.txt
 
 COPY ml_service /app/ml_service
 COPY deepfake_audio /app/deepfake_audio
