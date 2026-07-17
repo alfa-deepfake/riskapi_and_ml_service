@@ -36,6 +36,7 @@
             <span class="df-switch" aria-hidden="true"></span>
             <span class="df-state" id="dfState">выкл</span>
           </label>
+          <a class="btn-nav" href="#demo">Начать проверку</a>
           <div class="status" id="status">ожидание</div>
         </div>
       </nav>
@@ -51,6 +52,32 @@
           Deepfake-режим сверху — и посмотрите, как система распознаёт подмену
           лица за один сеанс проверки.
         </p>
+        <a class="btn-primary hero-cta" href="#demo">Начать проверку</a>
+
+        <div class="hero-scatter" aria-hidden="true">
+          <div class="hs-tile hs-t1">
+            <span class="hs-label">решение</span>
+            <span class="hs-pill hs-ok">allow</span>
+          </div>
+          <div class="hs-tile hs-t2">
+            <span class="hs-label">пульс rppg</span>
+            <svg viewBox="0 0 120 32"><polyline points="0,16 20,16 28,6 36,26 44,16 70,16 78,10 86,22 94,16 120,16" /></svg>
+          </div>
+          <div class="hs-tile hs-t3">
+            <span class="hs-label">поток</span>
+            <span class="hs-pill hs-deny">deepfake</span>
+          </div>
+          <div class="hs-tile hs-t4">
+            <span class="hs-label">подпись</span>
+            <span class="hs-mono">HMAC · DFS1</span>
+          </div>
+          <svg class="hs-icon hs-i1" viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.5 9-8 10-4.5-1-8-5-8-10V6z" /></svg>
+          <svg class="hs-icon hs-i2" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" fill="none" /></svg>
+          <svg class="hs-icon hs-i3" viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="10" ry="6" fill="none" /><circle cx="12" cy="12" r="2.5" /></svg>
+          <svg class="hs-icon hs-i4" viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.5 9-8 10-4.5-1-8-5-8-10V6z" /></svg>
+          <svg class="hs-icon hs-i5" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" fill="none" /></svg>
+          <svg class="hs-icon hs-i6" viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="10" ry="6" fill="none" /><circle cx="12" cy="12" r="2.5" /></svg>
+        </div>
 
         <div class="grid" id="demo">
           <section class="panel challenge-panel">
@@ -143,6 +170,13 @@
         </div>
       </section>
 
+      <div class="marquee" aria-hidden="true">
+        <div class="marquee-track">
+          <span class="marquee-group">активный свет ✦ пульс rppg ✦ жестовый челлендж ✦ аудио-антиспуфинг ✦ видео-классификатор ✦ hmac-подпись потока ✦ virtual-cam check ✦ riskapi ✦&nbsp;</span>
+          <span class="marquee-group">активный свет ✦ пульс rppg ✦ жестовый челлендж ✦ аудио-антиспуфинг ✦ видео-классификатор ✦ hmac-подпись потока ✦ virtual-cam check ✦ riskapi ✦&nbsp;</span>
+        </div>
+      </div>
+
       <section class="statement" aria-label="Идея продукта">
         <h2>Дипфейк выдаёт себя светом, пульсом и голосом</h2>
         <p>
@@ -155,10 +189,10 @@
 
       <section class="chart-band" id="chart" aria-label="Метрики обнаружения">
         <h2>Один поток — двенадцать сценариев атаки</h2>
-        <p>Доля обнаруженных атак по типам на внутреннем демо-стенде MVP.</p>
+        <p>Стенд прогоняет каждый сценарий; метрики обнаружения появятся здесь после первых серий.</p>
 
         <figure class="chart">
-          <svg viewBox="0 0 820 440" role="img" aria-label="Доля обнаруженных атак по 12 типам, от 88 до 99 процентов">
+          <svg viewBox="0 0 820 440" role="img" aria-label="Сценарии атак MVP-стенда; метрики обнаружения ещё не собраны">
             <g class="chart-grid">
               <line x1="220" y1="12" x2="220" y2="392" />
               <line x1="365" y1="12" x2="365" y2="392" />
