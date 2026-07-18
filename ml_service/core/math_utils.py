@@ -61,9 +61,17 @@ def best_lagged_correlation(left: list[float], right: list[float], max_lag: int 
     return best_corr, best_lag
 
 
+def _normalize_phrase(value: str) -> str:
+    # Whisper punctuates freely ("Банк, сигнал, река.") and ё/е spelling varies
+    # by voice — neither should count against the challenge-phrase match.
+    value = value.lower().replace("ё", "е")
+    value = "".join(ch if ch.isalnum() or ch.isspace() else " " for ch in value)
+    return " ".join(value.split())
+
+
 def levenshtein_ratio(expected: str, actual: str) -> float:
-    expected = " ".join(expected.lower().split())
-    actual = " ".join(actual.lower().split())
+    expected = _normalize_phrase(expected)
+    actual = _normalize_phrase(actual)
     if expected == actual:
         return 1.0
     if not expected or not actual:
