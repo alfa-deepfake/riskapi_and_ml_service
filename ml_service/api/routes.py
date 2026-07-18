@@ -57,7 +57,7 @@ async def create_session(payload: SessionCreateRequest) -> SessionResponse:
 async def get_challenge(session_id: str) -> SessionResponse:
     session = store.get(session_id)
     if session is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found or expired")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Сессия не найдена или истекла")
     return SessionResponse.from_session(session)
 
 
@@ -65,9 +65,9 @@ async def get_challenge(session_id: str) -> SessionResponse:
 async def score_session_evidence(session_id: str, payload: EvidenceRequest) -> ScoreResponse:
     session = store.get(session_id)
     if session is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found or expired")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Сессия не найдена или истекла")
     if payload.uid != session.uid or payload.check_id != session.check_id:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Evidence does not match session owner")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Данные не соответствуют владельцу сессии")
 
     result = scorer.score(payload.to_score_request(session.challenge))
     # A challenge is one-time: once scored, the same session/evidence cannot be
