@@ -66,12 +66,14 @@ class WhisperAsrAdapter:
                 )
                 # ``segments`` is a generator; consume it under the lock so a
                 # concurrent request cannot run inference through the same model.
-                # Belt-and-braces: skip any segment Whisper itself flags as
-                # probably-silence — that is where the canned hallucinations live.
+                # Belt-and-braces: skip segments Whisper flags as probably-silence
+                # — but, mirroring Whisper's own gating, only when the decode is
+                # also unconfident. Quiet Russian speech decoded confidently
+                # (high avg_logprob) must not be dropped.
                 return " ".join(
                     segment.text.strip()
                     for segment in segments
-                    if segment.no_speech_prob < 0.6
+                    if segment.no_speech_prob < 0.6 or segment.avg_logprob > -1.0
                 ).strip()
         finally:
             if wav_path != audio_path:

@@ -115,7 +115,10 @@ class V15VideoAdapter:
             "threshold": st["fusion_cfg"]["t_bin"],
             "model_name": "v16-xgb6+noise-cnn5+gbm",
             "frame_count": frame_count,
-            "face_present": bool(frames),
+            # face_present=False is a hard liveness fail downstream — only
+            # assert it when frames were actually examined and held no face.
+            # A clip that decoded zero frames is "unknown", not "no face".
+            "face_present": bool(frames) if examined else None,
             "face_confidence": len(frames) / examined if examined else 0.0,
             "sampled_frames": len(frames),
             "feature_count": len(st["feat_names"]),
