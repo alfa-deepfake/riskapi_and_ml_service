@@ -103,51 +103,10 @@
           </section>
 
           <aside class="panel evidence">
-            <h2>Результаты тестирования</h2>
+            <h2>Результат проверки</h2>
 
             <div class="decision" id="decision">не оценено</div>
-            <div class="risk-line" id="riskLine"></div>
-            <div class="checks" id="checksBreakdown"></div>
-
-            <h3>Ход проверки</h3>
-            <div class="tool-list" id="toolList">
-              <div class="tool active" data-tool="camera">Камера</div>
-              <div class="tool" data-tool="active_light">Активный свет</div>
-              <div class="tool" data-tool="gesture">Жест</div>
-              <div class="tool" data-tool="rppg">Пульс rPPG</div>
-              <div class="tool" data-tool="audio">Аудио-фраза</div>
-              <div class="tool" data-tool="score">Оценка риска</div>
-            </div>
-
-            <div class="metric">
-              <span>Лицо в кадре</span>
-              <b id="faceMetric">—</b>
-            </div>
-            <div class="metric">
-              <span>Активный свет</span>
-              <b id="lightMetric">ожидание</b>
-            </div>
-            <div class="metric">
-              <span>Пульс</span>
-              <b id="pulseMetric">ожидание</b>
-            </div>
-            <div class="metric">
-              <span>Жест</span>
-              <b id="gestureMetric">ожидание</b>
-            </div>
-            <div class="metric">
-              <span>Аудио</span>
-              <b id="audioMetric">ожидание</b>
-            </div>
-            <div class="metric">
-              <span>Видео-классификатор</span>
-              <b id="classifierMetric">ожидание</b>
-            </div>
-
-            <label>
-              Распознанная фраза (ASR сервера)
-              <input id="phraseInput" placeholder="заполняется после аудио-шага" readonly />
-            </label>
+            <p class="verdict-hint" id="verdictHint">Пройдите проверку, чтобы узнать результат</p>
 
             <details class="setup">
               <summary>Параметры подключения</summary>
@@ -165,7 +124,30 @@
               </label>
             </details>
 
-            <pre id="scoreJson"></pre>
+            <!-- Служебные элементы шага проверки: скрыты, но нужны логике app.js. -->
+            <div class="test-details" hidden>
+              <div class="risk-line" id="riskLine"></div>
+              <div class="checks" id="checksBreakdown"></div>
+              <div class="tool-list" id="toolList">
+                <div class="tool active" data-tool="camera">Камера</div>
+                <div class="tool" data-tool="active_light">Активный свет</div>
+                <div class="tool" data-tool="gesture">Жест</div>
+                <div class="tool" data-tool="rppg">Пульс rPPG</div>
+                <div class="tool" data-tool="audio">Аудио-фраза</div>
+                <div class="tool" data-tool="score">Оценка риска</div>
+              </div>
+              <div class="metric"><span>Лицо в кадре</span><b id="faceMetric">—</b></div>
+              <div class="metric"><span>Активный свет</span><b id="lightMetric">ожидание</b></div>
+              <div class="metric"><span>Пульс</span><b id="pulseMetric">ожидание</b></div>
+              <div class="metric"><span>Жест</span><b id="gestureMetric">ожидание</b></div>
+              <div class="metric"><span>Аудио</span><b id="audioMetric">ожидание</b></div>
+              <div class="metric"><span>Видео-классификатор</span><b id="classifierMetric">ожидание</b></div>
+              <label>
+                Распознанная фраза (ASR сервера)
+                <input id="phraseInput" placeholder="заполняется после аудио-шага" readonly />
+              </label>
+              <pre id="scoreJson"></pre>
+            </div>
           </aside>
         </div>
       </section>
