@@ -343,9 +343,12 @@ def _score_python_rppg(evidence: RppgEvidence) -> CheckScore:
 def score_gesture(evidence: GestureEvidence | None, challenge: ChallengePlan | None) -> CheckScore:
     if evidence is not None and evidence.skipped:
         return _skipped("gesture", 0.15)
-    expected = evidence.expected_action if evidence else None
+    # The session challenge is authoritative: the client must not be able to
+    # redefine which gesture was expected. Client value is a fallback for the
+    # challenge-less direct scoring endpoint only.
+    expected = _challenge_payload(challenge, "gesture", "expected_action")
     if expected is None:
-        expected = _challenge_payload(challenge, "gesture", "expected_action")
+        expected = evidence.expected_action if evidence else None
     if evidence is None or not expected or not evidence.observed_action:
         return CheckScore(name="gesture", status="unknown", risk=0.45, confidence=0.0, weight=0.15, reason="gesture evidence is missing")
     if evidence.detector in (None, "manual"):
@@ -397,9 +400,11 @@ def _gesture_details(evidence: GestureEvidence, expected: str) -> dict:
 def score_audio(evidence: AudioEvidence | None, challenge: ChallengePlan | None) -> CheckScore:
     if evidence is not None and evidence.skipped:
         return _skipped("audio", 0.20)
-    expected_phrase = evidence.phrase_expected if evidence else None
+    # The session challenge is authoritative: the client must not be able to
+    # substitute its own "expected" phrase for the random one it was issued.
+    expected_phrase = _challenge_payload(challenge, "audio_phrase", "phrase")
     if expected_phrase is None:
-        expected_phrase = _challenge_payload(challenge, "audio_phrase", "phrase")
+        expected_phrase = evidence.phrase_expected if evidence else None
     if evidence is None:
         return CheckScore(name="audio", status="unknown", risk=0.45, confidence=0.0, weight=0.20, reason="audio evidence is missing")
     if evidence.ai_probability is None:
