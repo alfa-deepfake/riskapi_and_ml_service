@@ -1150,15 +1150,19 @@ pre {
   fill: var(--text);
 }
 
-/* пустые треки: метрики ещё не собраны, никаких выдуманных значений */
+/* пустые треки: метрики ещё не собраны, никаких выдуманных значений.
+   Полупрозрачные рельсы читаются как «данных пока нет», а не как полные бары. */
 .chart .track rect {
-  fill: rgba(255, 255, 255, 0.05);
+  fill: rgba(255, 255, 255, 0.03);
+  stroke: rgba(255, 255, 255, 0.06);
+  stroke-width: 1;
 }
 
 .chart .empty-note {
   font-family: var(--font-mono);
-  font-size: 13px;
-  fill: var(--text-muted);
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  fill: var(--text);
   text-anchor: middle;
 }
 
@@ -1208,11 +1212,21 @@ pre {
 .feature-icon {
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-sm);
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
   background: var(--accent);
-  font-size: 22px;
+  color: var(--accent-vivid);
+}
+
+.feature-icon svg {
+  width: 26px;
+  height: 26px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .feature h3 {
@@ -1257,11 +1271,34 @@ pre {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  border: 1px solid rgba(0, 0, 0, 0.25);
-  border-radius: var(--radius-sm);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.5);
   padding: var(--space-sm) var(--space-md);
   font-size: 14px;
+  font-weight: var(--weight-bold);
   text-align: left;
+}
+
+.badge-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: #fff;
+  color: var(--accent-vivid);
+}
+
+.badge-icon svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /* ---------- split CTA ---------- */
