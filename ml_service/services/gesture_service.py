@@ -14,7 +14,7 @@ from starlette.concurrency import run_in_threadpool
 
 from ml_service.api.schemas import GestureEvidence, ServiceAnalyzeResponse
 from ml_service.core.checks import score_gesture
-from ml_service.services.common import read_upload, service_response, unavailable_check
+from ml_service.services.common import read_upload, safe_suffix, service_response, unavailable_check
 
 
 class GestureService:
@@ -27,17 +27,20 @@ class GestureService:
         expected_action: str,
         face_present: bool | None,
     ) -> ServiceAnalyzeResponse:
-        suffix = Path(file.filename or "gesture.webm").suffix or ".webm"
+        suffix = safe_suffix(file.filename, ".webm")
         with NamedTemporaryFile(suffix=suffix, delete=True) as tmp:
             tmp.write(await read_upload(file))
             tmp.flush()
             try:
                 # Mediapipe processes up to max_frames synchronously — keep it off the event loop.
                 result = await run_in_threadpool(_run_touch_detector, Path(tmp.name), expected_action)
-            except RuntimeError as exc:
+            except Exception as exc:
+                # Mediapipe/cv2 raise arbitrary exception types mid-clip; a
+                # degraded check must never become an HTTP 500.
+                reason = str(exc) if isinstance(exc, RuntimeError) else f"gesture inference failed: {type(exc).__name__}"
                 evidence = GestureEvidence(expected_action=expected_action, detector="hands-pose-face-mesh", face_present=face_present)
-                check = unavailable_check("gesture", 0.15, str(exc))
-                return service_response(self.name, evidence, check, message=str(exc))
+                check = unavailable_check("gesture", 0.15, reason)
+                return service_response(self.name, evidence, check, message=reason)
 
         evidence = GestureEvidence(
             expected_action=expected_action,
@@ -135,6 +138,12 @@ def _run_touch_detector(
     if not cap.isOpened():
         raise RuntimeError("could not open gesture video")
 
+    # max_frames is calibrated for ~30fps (6s of clip). A 60fps camera would
+    # otherwise hit the cap at 3s and lose late touches — subsample instead so
+    # the cap always covers the same wall-clock span.
+    fps = cap.get(cv2.CAP_PROP_FPS) or 0.0
+    stride = max(1, round(fps / 30.0)) if fps > 0 else 1
+
     face_frames = 0
     best_distance: float | None = None
     touch_streak = 0
@@ -149,10 +158,14 @@ def _run_touch_detector(
             mp_pose.Pose(model_complexity=1, min_detection_confidence=0.55, min_tracking_confidence=0.55) as pose,
             mp_face_mesh.FaceMesh(max_num_faces=1, refine_landmarks=True, min_detection_confidence=0.55, min_tracking_confidence=0.55) as face_mesh,
         ):
+            read_index = 0
             while frame_count < max_frames:
                 ok, frame = cap.read()
                 if not ok:
                     break
+                read_index += 1
+                if (read_index - 1) % stride != 0:
+                    continue
                 frame_count += 1
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 rgb.flags.writeable = False

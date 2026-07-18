@@ -11,7 +11,7 @@ from starlette.concurrency import run_in_threadpool
 from ml_service.api.schemas import RppgAnalyzeRequest, RppgEvidence, ServiceAnalyzeResponse
 from ml_service.config import Settings
 from ml_service.core.checks import score_rppg
-from ml_service.services.common import read_upload, service_response, unavailable_check
+from ml_service.services.common import read_upload, safe_suffix, service_response, unavailable_check
 
 
 class RppgService:
@@ -33,16 +33,19 @@ class RppgService:
         return service_response(self.name, evidence, check)
 
     async def analyze_video(self, file: UploadFile, *, face_present: bool | None, face_confidence: float | None) -> ServiceAnalyzeResponse:
-        suffix = Path(file.filename or "rppg.webm").suffix or ".webm"
+        suffix = safe_suffix(file.filename, ".webm")
         with NamedTemporaryFile(suffix=suffix, delete=True) as tmp:
             tmp.write(await read_upload(file))
             tmp.flush()
             try:
                 result = await run_in_threadpool(_run_rppg_runtime, Path(tmp.name))
-            except RuntimeError as exc:
+            except Exception as exc:
+                # _run_rppg_runtime wraps known failures in RuntimeError; anything
+                # else is still a degraded check, never an HTTP 500.
+                reason = str(exc) if isinstance(exc, RuntimeError) else f"rPPG inference failed: {type(exc).__name__}"
                 evidence = RppgEvidence(face_present=face_present, face_confidence=face_confidence)
-                check = unavailable_check("rppg", 0.18, str(exc))
-                return service_response(self.name, evidence, check, message=str(exc))
+                check = unavailable_check("rppg", 0.18, reason)
+                return service_response(self.name, evidence, check, message=reason)
 
         evidence = RppgEvidence(
             bpm=result.get("bpm"),
@@ -100,12 +103,16 @@ def _run_rppg_runtime(video_path: Path) -> dict:
     sqi = _to_float(result.get("SQI"))
     if sqi is not None:
         sqi = max(0.0, min(1.0, sqi))
+    latency = _to_float(result.get("latency"))
+    if latency is not None and latency < 0:
+        # schema requires latency >= 0; a junk model value must not 500 the check
+        latency = None
     # Face presence stays with the caller-provided evidence: open-rppg's frame
     # statistics count forward-filled frames and cannot be trusted for it.
     return {
         "bpm": bpm,
         "signal_quality": sqi,
-        "latency": _to_float(result.get("latency")),
+        "latency": latency,
         "hrv": {key: _to_float(value) for key, value in (result.get("hrv") or {}).items()},
         "samples": [],
         "sample_rate_hz": None,
