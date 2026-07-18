@@ -48,6 +48,11 @@ class WhisperAsrAdapter:
                     task="transcribe",
                     condition_on_previous_text=False,
                     without_timestamps=True,
+                    # Trim non-speech first: greedy decode otherwise drops a
+                    # short/quiet clip to an empty segment. Silero VAD ships with
+                    # faster-whisper and onnxruntime is in the image, so no
+                    # download happens at request time.
+                    vad_filter=True,
                 )
                 # ``segments`` is a generator; consume it under the lock so a
                 # concurrent request cannot run inference through the same model.
