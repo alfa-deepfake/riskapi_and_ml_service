@@ -1192,4 +1192,7 @@ async function exitFullscreenIfOwned() {
   }
 }
 
+// Ручка для консоли: dfLogs() -> текст лога проверки (copy(dfLogs()) чтобы скопировать).
+window.dfLogs = () => el.scoreJson.textContent;
+
 renderStep();
