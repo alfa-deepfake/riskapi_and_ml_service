@@ -5,6 +5,7 @@ const LIGHT_SETTLE_MS = Number(appConfig.lightSettleMs || 180);
 // safely under the WCAG 2.3.1 photosensitivity limit of 3 flashes/s — and
 // gives camera auto-exposure time to react to each change.
 const FLASH_PHASE_MS = Number(appConfig.flashPhaseMs || 250);
+const FLASH_FRAME_WAIT_MAX_MS = Number(appConfig.flashFrameWaitMaxMs || 400);
 const LIGHT_SAMPLE_COUNT = Number(appConfig.lightSampleCount || 4);
 const LIGHT_SAMPLE_INTERVAL_MS = Number(appConfig.lightSampleIntervalMs || 70);
 // Generous ceiling: the first rPPG call may wait out the ~1min model warmup
@@ -599,9 +600,12 @@ async function captureAndAnalyzeFlashPairs(pairs) {
 // The camera pipeline lags the screen by several frames, so a capture right
 // after a flash change often still shows the previous light. Wait out the
 // pacing floor, then require two frames actually sensed under the new light.
+// The frame wait is capped: dark phases push webcams into long exposure at a
+// few fps (and fullscreen can starve rVFC), which would stretch every phase
+// and the whole challenge with it.
 async function settleFlashPhase() {
   await sleep(FLASH_PHASE_MS);
-  await nextCameraFrames(2);
+  await Promise.race([nextCameraFrames(2), sleep(FLASH_FRAME_WAIT_MAX_MS)]);
 }
 
 function nextCameraFrames(count) {
