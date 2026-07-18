@@ -664,80 +664,8 @@ video {
   margin-bottom: 12px;
 }
 
-.side-title + .metrics,
-.tool-list + .side-title {
+.side-title + .metrics {
   margin-top: 26px;
-}
-
-.tool-list {
-  display: grid;
-  gap: 6px;
-}
-
-.tool {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-height: 40px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 8px 13px;
-  background: var(--surface);
-  color: var(--ink-soft);
-  font-size: 14px;
-  transition: border-color 160ms ease, color 160ms ease, background-color 160ms ease;
-}
-
-.tool::after {
-  content: "ожидание";
-  color: var(--muted);
-  font-size: 11px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.tool.active {
-  border-color: var(--alfa);
-  background: var(--alfa-tint);
-  color: var(--ink);
-  font-weight: 500;
-}
-
-.tool.active::after {
-  content: "текущий";
-  color: var(--alfa);
-}
-
-.tool.done {
-  border-color: rgba(15, 122, 88, 0.4);
-  color: var(--pass);
-}
-
-.tool.done::after {
-  content: "готово";
-  color: var(--pass);
-}
-
-.tool.failed {
-  border-color: rgba(208, 39, 26, 0.4);
-  color: var(--deny);
-}
-
-.tool.failed::after {
-  content: "не пройдено";
-  color: var(--deny);
-}
-
-.tool.skipped {
-  border-color: rgba(176, 115, 11, 0.4);
-  color: var(--warn);
-}
-
-.tool.skipped::after {
-  content: "пропущено";
-  color: var(--warn);
 }
 
 .metrics {

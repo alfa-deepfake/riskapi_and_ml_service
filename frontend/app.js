@@ -282,7 +282,6 @@ function renderStep() {
     el.currentStep.textContent = "Проверка не запущена";
     el.stageValue.textContent = "Готовы?";
     el.stepHint.textContent = "Нажмите «Начать проверку» — понадобится доступ к камере и микрофону.";
-    updateTools();
     return;
   }
 
@@ -294,7 +293,6 @@ function renderStep() {
   el.stageValue.textContent = displayValue(step);
   el.stepHint.textContent = displayHint(step);
   el.primaryAction.textContent = step.action;
-  updateTools();
 }
 
 function fmt(value, digits = 2) {
@@ -356,33 +354,6 @@ function displayHint(step) {
     return "Произнесите фразу вслух — сервер распознает и проверит её.";
   }
   return step.hint;
-}
-
-function updateTools() {
-  document.querySelectorAll(".tool").forEach((item) => {
-    const id = item.dataset.tool;
-    const s = toolState(id);
-    item.classList.toggle("active", state.session && currentFlowStep()?.id === id);
-    item.classList.toggle("done", s === "done");
-    item.classList.toggle("failed", s === "failed");
-    item.classList.toggle("skipped", s === "skipped");
-  });
-}
-
-// A tool is only "done" (green) when its check actually PASSED. A check that ran
-// but did not pass ("failed"/"unknown", e.g. no face in frame) shows "failed" —
-// collecting evidence is not the same as passing the check.
-function toolState(id) {
-  if (state.skipped.has(id)) return "skipped";
-  if (id === "camera") return state.stream ? "done" : "";
-  if (id === "score") {
-    const decision = el.decision.dataset.decision || "";
-    if (!decision) return "";
-    return decision === "allow" ? "done" : "failed";
-  }
-  const status = state.stepStatus[id];
-  if (!status) return "";
-  return status === "passed" ? "done" : "failed";
 }
 
 function advance() {
