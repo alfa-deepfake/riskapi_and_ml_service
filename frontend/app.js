@@ -108,6 +108,7 @@ const el = {
   classifierMetric: document.querySelector("#classifierMetric"),
   phraseInput: document.querySelector("#phraseInput"),
   decision: document.querySelector("#decision"),
+  verdictHint: document.querySelector("#verdictHint"),
   riskLine: document.querySelector("#riskLine"),
   checksBreakdown: document.querySelector("#checksBreakdown"),
   scoreJson: document.querySelector("#scoreJson"),
@@ -139,6 +140,14 @@ const STATUS_RU = {
 function statusRu(value) {
   return STATUS_RU[value] || value;
 }
+
+// The user only cares about one thing: deepfake or not. Collapse the server's
+// allow/review/deny decision into a plain verdict word + one-line hint.
+const DEEPFAKE_VERDICT = {
+  allow: { text: "не дипфейк", hint: "Признаков подмены не обнаружено" },
+  review: { text: "возможно дипфейк", hint: "Сигнал неоднозначный — требуется проверка" },
+  deny: { text: "дипфейк", hint: "Обнаружены признаки подмены" },
+};
 
 // Check identifiers from the server, mapped to Russian labels for the score
 // breakdown; unknown names fall through unchanged.
@@ -421,6 +430,7 @@ function resetEvidence() {
   el.decision.className = "decision";
   el.decision.dataset.decision = "";
   el.decision.textContent = "не оценено";
+  el.verdictHint.textContent = "Пройдите проверку, чтобы узнать результат";
   el.riskLine.textContent = "";
   el.checksBreakdown.innerHTML = "";
   el.scoreJson.textContent = "";
@@ -956,9 +966,11 @@ async function submitEvidence() {
     body: JSON.stringify(payload),
   });
   state.scored = true;
+  const verdict = DEEPFAKE_VERDICT[result.decision] || { text: statusRu(result.decision), hint: "" };
   el.decision.className = `decision ${result.decision}`;
   el.decision.dataset.decision = result.decision;
-  el.decision.textContent = statusRu(result.decision);
+  el.decision.textContent = verdict.text;
+  el.verdictHint.textContent = verdict.hint;
   el.riskLine.textContent = `риск ${fmt(result.risk_score)} · уверенность ${fmt(result.confidence)}`;
   renderChecksBreakdown(result);
   logLine(`оценка: ${statusRu(result.decision)} (риск ${fmt(result.risk_score)})`);
