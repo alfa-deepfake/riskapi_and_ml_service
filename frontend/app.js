@@ -279,9 +279,9 @@ function renderStep() {
   if (!state.session) {
     el.primaryAction.disabled = true;
     el.skipStep.disabled = true;
-    el.currentStep.textContent = "Создайте сессию для начала";
-    el.stageValue.textContent = "--";
-    el.stepHint.textContent = "Нажмите «Начать проверку»";
+    el.currentStep.textContent = "Проверка не запущена";
+    el.stageValue.textContent = "Готовы?";
+    el.stepHint.textContent = "Нажмите «Начать проверку» — понадобится доступ к камере и микрофону.";
     updateTools();
     return;
   }

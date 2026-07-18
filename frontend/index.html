@@ -3,109 +3,365 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Консоль проверки AntiDeepfake</title>
+    <meta name="color-scheme" content="light" />
+    <title>AlfaDeepfake — проверка на дипфейк</title>
+    <meta
+      name="description"
+      content="AlfaDeepfake проверяет, что на той стороне живой человек: активный свет, пульс, жест, голос и покадровый анализ видео."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <div class="flash-fullscreen" id="flashFullscreen" aria-hidden="true"></div>
-    <main class="shell">
-      <section class="workspace">
-        <div class="topbar">
-          <div>
-            <p class="eyebrow">ML-проверка</p>
-            <h1>Консоль проверки</h1>
+
+    <a class="skip-link" href="#demo">Перейти к проверке</a>
+
+    <header class="nav" id="nav">
+      <div class="nav-inner">
+        <a class="logo" href="#top" aria-label="AlfaDeepfake — на главную">
+          <svg class="logo-mark" viewBox="0 0 32 32" aria-hidden="true">
+            <rect width="32" height="32" rx="9" fill="#EF3124" />
+            <path
+              fill="#fff"
+              fill-rule="evenodd"
+              d="M16 6.4 24.1 25.6h-4.35l-1.2-3.05h-5.1l-1.2 3.05H7.9L16 6.4Zm0 6.9-1.5 4.05h3L16 13.3Z"
+            />
+            <rect x="10.4" y="27" width="11.2" height="2.1" rx="1.05" fill="#fff" />
+          </svg>
+          <span class="logo-word"><b>Alfa</b>Deepfake</span>
+        </a>
+
+        <div class="nav-menu" id="navMenu">
+          <nav class="nav-links" aria-label="Основная навигация">
+            <a href="#demo">Проверка</a>
+            <a href="#signals">Сигналы</a>
+            <a href="#flow">Как это работает</a>
+            <a href="#trust">Безопасность</a>
+          </nav>
+
+          <div class="nav-actions">
+            <a class="btn btn-ghost" href="http://localhost:8100/docs">Документация</a>
+            <a class="btn btn-primary" href="#demo" data-start-demo>Проверить себя</a>
           </div>
-          <div class="status" id="status">ожидание</div>
         </div>
 
-        <div class="grid">
-          <section class="panel setup">
-            <label>
-              ML API
-              <input id="apiUrl" value="http://localhost:8100" />
-            </label>
-            <label>
-              UID
-              <input id="uid" />
-            </label>
-            <label>
-              ID проверки
-              <input id="checkId" />
-            </label>
-            <button id="startVerification">Начать проверку</button>
-          </section>
+        <button class="nav-burger" id="navBurger" aria-expanded="false" aria-controls="navMenu" aria-label="Меню">
+          <span></span><span></span>
+        </button>
+      </div>
+    </header>
 
-          <section class="panel challenge-panel">
-            <div class="challenge-stage" id="challengeStage">
-              <video id="camera" autoplay muted playsinline></video>
-              <div class="face-guide" id="faceGuide" aria-hidden="true">
-                <div class="face-oval" id="faceOval"></div>
-                <p class="guide-hint" id="guideHint">Совместите лицо с овалом</p>
+    <main id="top">
+      <!-- ── Hero ─────────────────────────────────────────────────────── -->
+      <section class="hero">
+        <div class="wrap hero-inner">
+          <a class="pill-link" href="#signals">
+            <span class="pill-dot"></span>
+            Ансамбль v16 · пульс rPPG · антиспуфинг голоса
+            <span class="pill-arrow" aria-hidden="true">→</span>
+          </a>
+
+          <h1 class="hero-title">Убедитесь, что напротив&nbsp;— человек</h1>
+
+          <p class="hero-sub">
+            AlfaDeepfake собирает пять независимых сигналов живости и отдаёт один
+            объяснимый вердикт. Проверка идёт в браузере, без установки и загрузки файлов.
+          </p>
+
+          <div class="hero-actions">
+            <button class="btn btn-primary btn-lg" type="button" data-start-demo>Пройти проверку</button>
+            <a class="btn btn-outline btn-lg" href="#signals">Как устроены проверки</a>
+          </div>
+
+          <p class="hero-note">Нужна камера и микрофон. Запись не покидает ваш контур — сервис разворачивается on-premise.</p>
+        </div>
+      </section>
+
+      <!-- ── Живой тест ───────────────────────────────────────────────── -->
+      <section class="demo-section" id="demo">
+        <div class="wrap">
+          <article class="console">
+            <header class="console-top">
+              <div>
+                <p class="console-eyebrow">Живая проверка</p>
+                <h2 class="console-title">Сессия верификации</h2>
               </div>
-              <div class="stage-overlay">
-                <p id="currentStep">Создайте сессию для начала</p>
-                <strong id="stageValue">--</strong>
-                <small id="stepHint">Нажмите «Начать проверку»</small>
+              <div class="console-top-right">
+                <div class="status" id="status">ожидание</div>
+                <button class="btn btn-primary" id="startVerification" type="button">Начать проверку</button>
               </div>
+            </header>
+
+            <div class="console-body">
+              <div class="console-main">
+                <div class="challenge-stage" id="challengeStage">
+                  <video id="camera" autoplay muted playsinline></video>
+                  <div class="face-guide" id="faceGuide" aria-hidden="true">
+                    <div class="face-oval" id="faceOval"></div>
+                    <p class="guide-hint" id="guideHint">Совместите лицо с овалом</p>
+                  </div>
+                  <div class="stage-overlay">
+                    <p id="currentStep">Проверка не запущена</p>
+                    <strong id="stageValue">Готовы?</strong>
+                    <small id="stepHint">Нажмите «Начать проверку» — понадобится доступ к камере и микрофону.</small>
+                  </div>
+                </div>
+
+                <div class="controls">
+                  <button class="btn btn-dark" id="primaryAction" type="button" disabled>Продолжить</button>
+                  <button class="btn btn-outline test-only" id="skipStep" type="button" disabled>Пропустить шаг</button>
+                  <button class="btn btn-outline" id="resetFlow" type="button">Сбросить</button>
+                </div>
+
+                <div class="result-block">
+                  <div class="decision" id="decision">не оценено</div>
+                  <div class="risk-line" id="riskLine"></div>
+                  <div class="checks" id="checksBreakdown"></div>
+                </div>
+              </div>
+
+              <aside class="console-side">
+                <h3 class="side-title">Шаги проверки</h3>
+                <div class="tool-list" id="toolList">
+                  <div class="tool" data-tool="camera"><span class="tool-name">Камера</span></div>
+                  <div class="tool" data-tool="active_light"><span class="tool-name">Активный свет</span></div>
+                  <div class="tool" data-tool="gesture"><span class="tool-name">Жест</span></div>
+                  <div class="tool" data-tool="rppg"><span class="tool-name">Пульс rPPG</span></div>
+                  <div class="tool" data-tool="audio"><span class="tool-name">Аудио-фраза</span></div>
+                  <div class="tool" data-tool="score"><span class="tool-name">Оценка риска</span></div>
+                </div>
+
+                <h3 class="side-title">Сигналы</h3>
+                <div class="metrics">
+                  <div class="metric"><span>Лицо в кадре</span><b id="faceMetric">—</b></div>
+                  <div class="metric"><span>Активный свет</span><b id="lightMetric">ожидание</b></div>
+                  <div class="metric"><span>Пульс</span><b id="pulseMetric">ожидание</b></div>
+                  <div class="metric"><span>Жест</span><b id="gestureMetric">ожидание</b></div>
+                  <div class="metric"><span>Аудио</span><b id="audioMetric">ожидание</b></div>
+                  <div class="metric"><span>Видео-классификатор</span><b id="classifierMetric">ожидание</b></div>
+                </div>
+
+                <label class="field">
+                  Распознанная фраза
+                  <input id="phraseInput" placeholder="заполнится после аудио-шага" readonly />
+                </label>
+              </aside>
             </div>
-            <div class="controls">
-              <button id="primaryAction" disabled>Продолжить</button>
-              <button id="skipStep" class="test-only" disabled>Пропустить шаг</button>
-              <button id="resetFlow">Сбросить</button>
-            </div>
-            <div class="result-block">
-              <div class="decision" id="decision">не оценено</div>
-              <div class="risk-line" id="riskLine"></div>
-              <div class="checks" id="checksBreakdown"></div>
+
+            <details class="drawer">
+              <summary>Журнал проверки</summary>
               <pre id="scoreJson"></pre>
-            </div>
-          </section>
+            </details>
 
-          <section class="panel evidence">
-            <h2>Инструменты</h2>
-            <div class="tool-list" id="toolList">
-              <div class="tool active" data-tool="camera">Камера</div>
-              <div class="tool" data-tool="active_light">Активный свет</div>
-              <div class="tool" data-tool="gesture">Жест</div>
-              <div class="tool" data-tool="rppg">Пульс rPPG</div>
-              <div class="tool" data-tool="audio">Аудио-фраза</div>
-              <div class="tool" data-tool="score">Оценка риска</div>
-            </div>
-            <div class="metric">
-              <span>Лицо в кадре</span>
-              <b id="faceMetric">—</b>
-            </div>
-            <div class="metric">
-              <span>Активный свет</span>
-              <b id="lightMetric">ожидание</b>
-            </div>
-            <div class="metric">
-              <span>Пульс</span>
-              <b id="pulseMetric">ожидание</b>
-            </div>
-            <div class="metric">
-              <span>Жест</span>
-              <b id="gestureMetric">ожидание</b>
-            </div>
-            <div class="metric">
-              <span>Аудио</span>
-              <b id="audioMetric">ожидание</b>
-            </div>
-            <div class="metric">
-              <span>Видео-классификатор</span>
-              <b id="classifierMetric">ожидание</b>
-            </div>
-            <label>
-              Распознанная фраза (ASR сервера)
-              <input id="phraseInput" placeholder="заполняется после аудио-шага" readonly />
-            </label>
-          </section>
+            <details class="drawer">
+              <summary>Параметры подключения</summary>
+              <div class="drawer-grid">
+                <label class="field">ML API<input id="apiUrl" value="http://localhost:8100" /></label>
+                <label class="field">UID<input id="uid" /></label>
+                <label class="field">ID проверки<input id="checkId" /></label>
+              </div>
+            </details>
+          </article>
 
+          <ul class="stats">
+            <li><b>5</b><span>независимых сигналов в одном потоке</span></li>
+            <li><b>~40 c</b><span>полный цикл проверки в браузере</span></li>
+            <li><b>0</b><span>обращений к внешним API — модели локальные</span></li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ── Сигналы ──────────────────────────────────────────────────── -->
+      <section class="section" id="signals">
+        <div class="wrap">
+          <header class="section-head">
+            <p class="eyebrow">Сигналы</p>
+            <h2>Пять способов отличить человека от синтеза</h2>
+            <p class="section-lead">
+              Каждая проверка ловит свой класс подделок. Дипфейк, который проходит одну,
+              обычно спотыкается на следующей.
+            </p>
+          </header>
+
+          <div class="cards" data-reveal>
+            <article class="card">
+              <span class="card-tag">видео</span>
+              <h3>Покадровый классификатор</h3>
+              <p>
+                Ансамбль v16: XGBoost по 73 форензик-признакам и Noise-CNN по карте шумовых
+                остатков. Модальности сливает GBM, результат сглаживается по кадрам медианой.
+              </p>
+            </article>
+
+            <article class="card">
+              <span class="card-tag">свет</span>
+              <h3>Активный свет</h3>
+              <p>
+                Экран мигает чёрным и белым, сервис сверяет отклик яркости лица с ожидаемой
+                последовательностью. Наложенное поверх видео лицо реагирует иначе.
+              </p>
+            </article>
+
+            <article class="card">
+              <span class="card-tag">физиология</span>
+              <h3>Пульс rPPG</h3>
+              <p>
+                Модель FacePhys снимает сердечный ритм по микроизменениям цвета кожи
+                и отдельно оценивает качество сигнала — синтез пульса не даёт.
+              </p>
+            </article>
+
+            <article class="card">
+              <span class="card-tag">жест</span>
+              <h3>Случайный жест</h3>
+              <p>
+                Сервер выдаёт действие в момент сессии — коснуться носа или губ. Заранее
+                отрендеренный ролик такой челлендж не пройдёт.
+              </p>
+            </article>
+
+            <article class="card">
+              <span class="card-tag">голос</span>
+              <h3>Антиспуфинг речи</h3>
+              <p>
+                WavLM-классификатор на четырёх генераторах синтеза плюс распознавание
+                выданной фразы через Faster-Whisper: проверяем и голос, и что сказано.
+              </p>
+            </article>
+
+            <article class="card card-accent">
+              <span class="card-tag">решение</span>
+              <h3>Объяснимый вердикт</h3>
+              <p>
+                Каскад сводит проверки в один ответ — allow, review или deny — с вкладом
+                и причиной каждого сигнала. Никакого чёрного ящика в логах антифрода.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Как это работает ─────────────────────────────────────────── -->
+      <section class="section section-alt" id="flow">
+        <div class="wrap">
+          <header class="section-head">
+            <p class="eyebrow">Поток</p>
+            <h2>Четыре шага от сессии до решения</h2>
+          </header>
+
+          <ol class="steps" data-reveal>
+            <li>
+              <span class="step-num">01</span>
+              <h3>Сессия</h3>
+              <p><code>POST /v1/sessions</code> — сервис заводит проверку под ваш <code>uid</code> и <code>check_id</code>.</p>
+            </li>
+            <li>
+              <span class="step-num">02</span>
+              <h3>Челлендж</h3>
+              <p>В ответ приходит одноразовый набор заданий: последовательность вспышек, жест и фраза.</p>
+            </li>
+            <li>
+              <span class="step-num">03</span>
+              <h3>Доказательства</h3>
+              <p>Браузер собирает видео, отклик яркости, клип для rPPG и аудио, затем отправляет их на разбор.</p>
+            </li>
+            <li>
+              <span class="step-num">04</span>
+              <h3>Вердикт</h3>
+              <p>Каскад считает риск и, если задан <code>RISK_API_URL</code>, отдаёт результат в risk-api колбэком.</p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- ── Безопасность ─────────────────────────────────────────────── -->
+      <section class="section section-dark" id="trust">
+        <div class="wrap trust-grid">
+          <div>
+            <p class="eyebrow eyebrow-light">Контур</p>
+            <h2>Проверка живёт внутри вашего периметра</h2>
+            <p class="section-lead section-lead-light">
+              Сервис поставляется как Docker Compose с ML-сервисом, risk-api и MongoDB.
+              Веса моделей монтируются с хоста и читаются только на чтение.
+            </p>
+          </div>
+          <ul class="trust-list">
+            <li><b>Без внешних вызовов.</b> WavLM, Faster-Whisper и InsightFace собираются из локальных файлов, без похода в HuggingFace.</li>
+            <li><b>Одноразовый челлендж.</b> Сессия сгорает после оценки, повторная отправка тех же доказательств не проходит.</li>
+            <li><b>Адаптеры вместо монолита.</b> Новый детектор добавляется как <code>SignalDetector</code> — HTTP-контракт не меняется.</li>
+            <li><b>Честные отказы.</b> Если лица нет в кадре или входное видео восстановлено нейросетью, проверка не «пройдёт по умолчанию».</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ── CTA ──────────────────────────────────────────────────────── -->
+      <section class="cta" id="start">
+        <div class="wrap cta-inner">
+          <h2>Попробуйте прямо сейчас</h2>
+          <p>Дайте доступ к камере и пройдите полный цикл за минуту — на этой же странице.</p>
+          <div class="hero-actions">
+            <button class="btn btn-primary btn-lg" type="button" data-start-demo>Пройти проверку</button>
+            <a class="btn btn-outline btn-lg" href="http://localhost:8100/docs">Открыть API</a>
+          </div>
         </div>
       </section>
     </main>
 
+    <footer class="footer">
+      <div class="wrap footer-inner">
+        <div class="footer-brand">
+          <a class="logo" href="#top" aria-label="AlfaDeepfake">
+            <svg class="logo-mark" viewBox="0 0 32 32" aria-hidden="true">
+              <rect width="32" height="32" rx="9" fill="#EF3124" />
+              <path
+                fill="#fff"
+                fill-rule="evenodd"
+                d="M16 6.4 24.1 25.6h-4.35l-1.2-3.05h-5.1l-1.2 3.05H7.9L16 6.4Zm0 6.9-1.5 4.05h3L16 13.3Z"
+              />
+              <rect x="10.4" y="27" width="11.2" height="2.1" rx="1.05" fill="#fff" />
+            </svg>
+            <span class="logo-word"><b>Alfa</b>Deepfake</span>
+          </a>
+          <p>Антифрод-проверка живости для видеозвонков и удалённой идентификации.</p>
+        </div>
+
+        <nav class="footer-col" aria-label="Проверки">
+          <h4>Проверки</h4>
+          <a href="#signals">Видео-классификатор</a>
+          <a href="#signals">Активный свет</a>
+          <a href="#signals">Пульс rPPG</a>
+          <a href="#signals">Жест</a>
+          <a href="#signals">Голос</a>
+        </nav>
+
+        <nav class="footer-col" aria-label="Платформа">
+          <h4>Платформа</h4>
+          <a href="#flow">Поток проверки</a>
+          <a href="#trust">Развёртывание</a>
+          <a href="#demo">Живая сессия</a>
+        </nav>
+
+        <nav class="footer-col" aria-label="Разработчикам">
+          <h4>Разработчикам</h4>
+          <a href="http://localhost:8100/health">Health-check</a>
+          <a href="http://localhost:8100/docs">OpenAPI ML-сервиса</a>
+          <a href="http://localhost:8000/docs">OpenAPI risk-api</a>
+        </nav>
+      </div>
+      <div class="wrap footer-bottom">
+        <span>AlfaDeepfake · внутренний контур Альфа-Банка</span>
+        <span>Демо-стенд</span>
+      </div>
+    </footer>
+
     <script src="./config.js"></script>
     <script src="./app.js"></script>
+    <script src="./landing.js"></script>
   </body>
 </html>
