@@ -119,12 +119,13 @@ def test_forensic_override_blocks_allow_decision():
     decision = _decision([overridden, *passing], 0.20, allow_threshold=0.35, deny_threshold=0.72)
     assert decision == "review"
 
-    # A merely-missing classifier keeps the old behavior.
+    # A missing classifier verdict must not read as "не дипфейк": the primary
+    # deepfake detector is a hard check, so no verdict routes to review.
     missing = CheckScore(
         name="classifier", status="unknown", risk=0.45, confidence=0.0, weight=0.25,
         reason="frame classifier evidence is missing",
     )
-    assert _decision([missing, *passing], 0.20, allow_threshold=0.35, deny_threshold=0.72) == "allow"
+    assert _decision([missing, *passing], 0.20, allow_threshold=0.35, deny_threshold=0.72) == "review"
 
 
 def test_v15_adapter_gate_requires_cnn_weights(monkeypatch, tmp_path):
