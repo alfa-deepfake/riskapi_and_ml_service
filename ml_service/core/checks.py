@@ -10,7 +10,7 @@ from ml_service.api.schemas import (
 )
 from ml_service.config import Settings
 from ml_service.core.challenge import ChallengePlan
-from ml_service.core.math_utils import best_lagged_correlation, clamp01, levenshtein_ratio
+from ml_service.core.math_utils import best_lagged_correlation, clamp01, levenshtein_ratio, phrase_word_match_fraction
 
 
 def score_classifier(evidence: ClassifierEvidence | None) -> CheckScore:
@@ -442,9 +442,14 @@ def score_audio(evidence: AudioEvidence | None, challenge: ChallengePlan | None)
             },
         )
     phrase_ratio = None
+    word_fraction = None
     if expected_phrase:
         phrase_ratio = levenshtein_ratio(expected_phrase, evidence.phrase_transcribed)
-    phrase_ok = phrase_ratio is None or phrase_ratio >= 0.78
+        word_fraction = phrase_word_match_fraction(expected_phrase, evidence.phrase_transcribed)
+    # Full-string ratio 0.78 cannot survive ASR dropping one word of three on a
+    # poor microphone; 2-of-3 fuzzy word matches keep the challenge binding
+    # while tolerating exactly that.
+    phrase_ok = phrase_ratio is None or phrase_ratio >= 0.78 or word_fraction >= 2 / 3
     ai_risk = evidence.ai_probability
     speaker_bonus = evidence.speaker_match_probability if evidence.speaker_match_probability is not None else 0.50
     phrase_risk = 0.0 if phrase_ok else 0.70
@@ -462,6 +467,7 @@ def score_audio(evidence: AudioEvidence | None, challenge: ChallengePlan | None)
         details={
             "expected_phrase": expected_phrase,
             "phrase_ratio": phrase_ratio,
+            "phrase_word_fraction": word_fraction,
             "ai_probability": evidence.ai_probability,
             "speaker_match_probability": evidence.speaker_match_probability,
             "duration_seconds": evidence.duration_seconds,

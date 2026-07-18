@@ -41,6 +41,12 @@ class SessionResponse(BaseModel):
         return cls(**session.model_dump())
 
 
+class AudioPhraseResponse(BaseModel):
+    phrase: str
+    ttl_seconds: int
+    attempts_left: int
+
+
 class ClassifierEvidence(BaseModel):
     skipped: bool = False
     fake_probability: float | None = Field(default=None, ge=0.0, le=1.0)

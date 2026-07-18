@@ -69,6 +69,25 @@ def _normalize_phrase(value: str) -> str:
     return " ".join(value.split())
 
 
+def phrase_word_match_fraction(expected: str, actual: str) -> float:
+    """Fraction of expected words found in the transcript by per-word fuzzy
+    match. Robust to ASR dropping/mangling one word of three on a poor mic; a
+    transcript that recites extra vocabulary to sweep up matches overshoots
+    the length guard and scores 0."""
+    expected_words = _normalize_phrase(expected).split()
+    actual_words = _normalize_phrase(actual).split()
+    if not expected_words or not actual_words:
+        return 0.0
+    if len(actual_words) > 3 * len(expected_words):
+        return 0.0
+    matched = sum(
+        1
+        for word in expected_words
+        if max(levenshtein_ratio(word, candidate) for candidate in actual_words) >= 0.70
+    )
+    return matched / len(expected_words)
+
+
 def levenshtein_ratio(expected: str, actual: str) -> float:
     expected = _normalize_phrase(expected)
     actual = _normalize_phrase(actual)

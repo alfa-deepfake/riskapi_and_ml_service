@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     active_light_min_color_cosine: float = Field(default=0.15, alias="ML_ACTIVE_LIGHT_MIN_COLOR_COSINE")
     rppg_min_signal_quality: float = Field(default=0.35, alias="ML_RPPG_MIN_SIGNAL_QUALITY")
 
+    # The phrase is useful to a voice-cloning pipeline from the moment it is
+    # disclosed; the TTL keeps that window barely longer than honestly speaking
+    # it. Each retry burns an attempt and gets a fresh phrase.
+    audio_phrase_ttl_seconds: int = Field(default=15, alias="ML_AUDIO_PHRASE_TTL_SECONDS")
+    audio_max_attempts: int = Field(default=3, ge=1, alias="ML_AUDIO_MAX_ATTEMPTS")
+
     audio_model_path: str = Field(default="models/audio/wavlm_all4_best.pt", alias="ML_AUDIO_MODEL_PATH")
     asr_model_path: str = Field(default="models/asr/faster-whisper-medium", alias="ML_ASR_MODEL_PATH")
     asr_device: str = Field(default="cpu", alias="ML_ASR_DEVICE")

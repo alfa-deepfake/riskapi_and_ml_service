@@ -30,13 +30,44 @@ GESTURES = (
     ("touch_nose", "коснитесь носа"),
 )
 
-AUDIO_WORDS = ("банк", "сигнал", "река", "кредит", "зима", "апельсин", "вектор", "клиент")
+# Multi-syllable, phonetically distinct words: short words ("банк", "река")
+# are exactly what ASR drops on a poor microphone, and near-homophones would
+# defeat the per-word fuzzy match.
+AUDIO_WORDS = (
+    "апельсин",
+    "барабан",
+    "библиотека",
+    "виноград",
+    "горизонт",
+    "карандаш",
+    "капитан",
+    "космонавт",
+    "крокодил",
+    "лестница",
+    "магазин",
+    "молоток",
+    "океан",
+    "паровоз",
+    "пирамида",
+    "телефон",
+    "фотография",
+    "черепаха",
+)
+
+# Shown until the client requests a fresh phrase right before recording; the
+# real phrase must not sit in the challenge payload for the whole session.
+AUDIO_PROMPT_PLACEHOLDER = "фраза появится перед записью"
+
+
+def generate_audio_phrase(rng: random.Random | None = None) -> str:
+    rng = rng or random.Random(uuid.uuid4().int)
+    return " ".join(rng.sample(AUDIO_WORDS, 3))
 
 
 def generate_challenge(seed: int | None = None) -> ChallengePlan:
     rng = random.Random(seed if seed is not None else uuid.uuid4().int)
     gesture_id, gesture_prompt = rng.choice(GESTURES)
-    phrase = " ".join(rng.sample(AUDIO_WORDS, 3))
+    phrase = generate_audio_phrase(rng)
     light_sequence = [rng.choice((0, 255)) for _ in range(10)]
     if len(set(light_sequence)) == 1:
         light_sequence[-1] = 255 - light_sequence[-1]
@@ -67,9 +98,11 @@ def generate_challenge(seed: int | None = None) -> ChallengePlan:
             ChallengeStep(
                 step_id=str(uuid.uuid4()),
                 type="audio_phrase",
-                prompt=phrase,
+                # payload.phrase stays for legacy clients that never request a
+                # fresh phrase; new clients see the placeholder until they do.
+                prompt=AUDIO_PROMPT_PLACEHOLDER,
                 payload={"phrase": phrase},
-                duration_ms=4000,
+                duration_ms=6000,
             ),
         ],
     )

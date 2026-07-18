@@ -16,6 +16,14 @@ class SessionRecord(BaseModel):
     created_at: datetime
     expires_at: datetime
     challenge: ChallengePlan
+    # Audio phrase freshness state. The phrase itself lives in the challenge
+    # plan (rotated on every issue); issued_at drives the TTL, consumed makes
+    # each phrase single-submission, and the server-held analysis evidence
+    # overrides whatever the client submits at final scoring.
+    audio_phrase_issued_at: datetime | None = None
+    audio_phrase_consumed: bool = False
+    audio_attempts: int = 0
+    audio_result_evidence: dict | None = None
 
 
 class ChallengeStore:

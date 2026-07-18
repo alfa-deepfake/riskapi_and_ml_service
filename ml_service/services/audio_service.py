@@ -16,6 +16,13 @@ from ml_service.services.common import read_upload, safe_suffix, service_respons
 class AudioService:
     name = "audio"
 
+    def expired_response(self) -> ServiceAnalyzeResponse:
+        """The issued phrase is stale or already used: an explicit unknown that
+        tells the client to request a fresh phrase, never a pass or a fail."""
+        evidence = AudioEvidence(detector="phrase_expired")
+        check = unavailable_check("audio", 0.20, "audio phrase expired or already used — request a new one")
+        return service_response(self.name, evidence, check, message="phrase_expired")
+
     async def analyze_audio(
         self,
         file: UploadFile,

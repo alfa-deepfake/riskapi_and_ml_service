@@ -6,6 +6,8 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
 from ml_service.api.schemas import (
     ActiveLightAnalyzeRequest,
+    AudioEvidence,
+    AudioPhraseResponse,
     EvidenceRequest,
     HealthResponse,
     RppgAnalyzeRequest,
@@ -16,6 +18,7 @@ from ml_service.api.schemas import (
     SessionResponse,
 )
 from ml_service.config import settings
+from ml_service.core.challenge import generate_audio_phrase
 from ml_service.core.challenge_store import ChallengeStore
 from ml_service.core.risk_api import RiskApiClient
 from ml_service.core.scoring import CascadeScorer
@@ -61,6 +64,62 @@ async def get_challenge(session_id: str) -> SessionResponse:
     return SessionResponse.from_session(session)
 
 
+def _audio_step(session):
+    return next(step for step in session.challenge.steps if step.type == "audio_phrase")
+
+
+@router.post("/v1/sessions/{session_id}/audio/phrase", response_model=AudioPhraseResponse, tags=["services"])
+async def issue_audio_phrase(session_id: str) -> AudioPhraseResponse:
+    """A fresh random phrase with a short TTL, issued right before recording.
+
+    Issuing rotates the phrase stored in the session challenge (so final
+    scoring always verifies against the latest one) and voids any previous
+    server-held audio analysis — a client cannot keep the best of several
+    attempts."""
+    session = store.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Сессия не найдена или истекла")
+    if session.audio_attempts >= settings.audio_max_attempts:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Попытки аудио-проверки исчерпаны")
+    phrase = generate_audio_phrase()
+    session.audio_attempts += 1
+    session.audio_phrase_issued_at = datetime.now(timezone.utc)
+    session.audio_phrase_consumed = False
+    session.audio_result_evidence = None
+    step = _audio_step(session)
+    step.prompt = phrase
+    step.payload["phrase"] = phrase
+    return AudioPhraseResponse(
+        phrase=phrase,
+        ttl_seconds=settings.audio_phrase_ttl_seconds,
+        attempts_left=settings.audio_max_attempts - session.audio_attempts,
+    )
+
+
+@router.post("/v1/sessions/{session_id}/audio/analyze", response_model=ServiceAnalyzeResponse, tags=["services"])
+async def analyze_session_audio(session_id: str, file: UploadFile = File(...)) -> ServiceAnalyzeResponse:
+    """Session-bound audio analysis: the expected phrase comes from the session
+    (never from the client), must be fresh (TTL) and is single-submission."""
+    session = store.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Сессия не найдена или истекла")
+    issued_at = session.audio_phrase_issued_at
+    fresh = (
+        issued_at is not None
+        and (datetime.now(timezone.utc) - issued_at).total_seconds() <= settings.audio_phrase_ttl_seconds
+    )
+    if not fresh or session.audio_phrase_consumed:
+        return audio_service.expired_response()
+    session.audio_phrase_consumed = True
+    response = await audio_service.analyze_audio(
+        file,
+        phrase_expected=_audio_step(session).payload["phrase"],
+        phrase_transcribed=None,
+    )
+    session.audio_result_evidence = response.evidence
+    return response
+
+
 @router.post("/v1/sessions/{session_id}/evidence", response_model=ScoreResponse, tags=["scoring"])
 async def score_session_evidence(session_id: str, payload: EvidenceRequest) -> ScoreResponse:
     session = store.get(session_id)
@@ -68,6 +127,13 @@ async def score_session_evidence(session_id: str, payload: EvidenceRequest) -> S
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Сессия не найдена или истекла")
     if payload.uid != session.uid or payload.check_id != session.check_id:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Данные не соответствуют владельцу сессии")
+
+    # Once a fresh phrase was issued, the client's audio evidence is ignored:
+    # only the server-held analysis (made against that phrase, within its TTL)
+    # counts. No analysis on record → the audio check scores as missing.
+    if session.audio_phrase_issued_at is not None:
+        stored = session.audio_result_evidence
+        payload.evidence.audio = AudioEvidence(**stored) if stored is not None else None
 
     result = scorer.score(payload.to_score_request(session.challenge))
     # A challenge is one-time: once scored, the same session/evidence cannot be

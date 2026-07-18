@@ -6,6 +6,12 @@ const LIGHT_SETTLE_MS = Number(appConfig.lightSettleMs || 180);
 // gives camera auto-exposure time to react to each change.
 const FLASH_PHASE_MS = Number(appConfig.flashPhaseMs || 250);
 const FLASH_FRAME_WAIT_MAX_MS = Number(appConfig.flashFrameWaitMaxMs || 400);
+// Audio: mic level preflight runs before the phrase is disclosed; attempts
+// mirror the server-side ML_AUDIO_MAX_ATTEMPTS limit.
+const MIC_PREFLIGHT_MS = Number(appConfig.micPreflightMs || 2000);
+const MIC_PREFLIGHT_TRIES = 3;
+const MIC_MIN_RMS = Number(appConfig.micMinRms || 0.01);
+const AUDIO_MAX_ATTEMPTS = 3;
 const LIGHT_SAMPLE_COUNT = Number(appConfig.lightSampleCount || 4);
 const LIGHT_SAMPLE_INTERVAL_MS = Number(appConfig.lightSampleIntervalMs || 70);
 // Generous ceiling: the first rPPG call may wait out the ~1min model warmup
@@ -708,46 +714,123 @@ async function samplePulse() {
   setStatus("пульс замерен");
 }
 
+// Level check on arbitrary speech BEFORE any phrase is disclosed: re-tries at
+// this stage cost nothing security-wise, because no challenge is in the open
+// yet. Advisory only — a stubbornly quiet mic logs a warning, never a dead end.
+async function micPreflight() {
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  } catch (_error) {
+    return; // recording will fail later with its own message
+  }
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AudioCtx();
+    try {
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 2048;
+      ctx.createMediaStreamSource(stream).connect(analyser);
+      const data = new Float32Array(analyser.fftSize);
+      for (let attempt = 0; attempt < MIC_PREFLIGHT_TRIES; attempt += 1) {
+        setStatus("проверка микрофона");
+        el.stepHint.textContent = "Скажите что-нибудь вслух — проверяем уровень микрофона.";
+        const stop = startCountdown(MIC_PREFLIGHT_MS, "СКАЖИТЕ ЧТО-НИБУДЬ");
+        let peak = 0;
+        const startedAt = performance.now();
+        try {
+          while (performance.now() - startedAt < MIC_PREFLIGHT_MS) {
+            await sleep(100);
+            analyser.getFloatTimeDomainData(data);
+            let sum = 0;
+            for (let i = 0; i < data.length; i += 1) sum += data[i] * data[i];
+            peak = Math.max(peak, Math.sqrt(sum / data.length));
+          }
+        } finally {
+          stop();
+        }
+        if (peak >= MIC_MIN_RMS) {
+          logLine(`микрофон: уровень в норме (RMS ${peak.toFixed(3)})`);
+          return;
+        }
+        logLine(`микрофон: очень тихо (RMS ${peak.toFixed(3)}), попытка ${attempt + 1}/${MIC_PREFLIGHT_TRIES}`);
+        el.stageValue.textContent = "ОЧЕНЬ ТИХО";
+        el.stepHint.textContent = "Говорите громче или поднесите микрофон ближе.";
+        await sleep(1200);
+      }
+      logLine("микрофон: уровень так и не поднялся — продолжаем, проверка может не пройти");
+    } finally {
+      await ctx.close();
+    }
+  } catch (_error) {
+    // No AudioContext/analyser — skip the preflight rather than block the flow.
+  } finally {
+    stream.getTracks().forEach((track) => track.stop());
+  }
+}
+
 async function recordAudio() {
   const audioStep = getStep("audio_phrase");
-  el.stageValue.textContent = audioStep.prompt;
-  setStatus("запись аудио");
+  await micPreflight();
 
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    const started = performance.now();
-    const stopCountdown = startCountdown(audioStep.duration_ms || 4000, "ГОВОРИТЕ");
-    let blob;
+  // Each attempt gets a fresh phrase with a short server-side TTL, so a retry
+  // never extends the window between phrase disclosure and recording.
+  for (let attempt = 0; attempt < AUDIO_MAX_ATTEMPTS; attempt += 1) {
+    let issue;
     try {
-      blob = await recordStreamBlob(stream, audioStep.duration_ms || 4000);
-    } finally {
-      stopCountdown();
-      stream.getTracks().forEach((track) => track.stop());
+      issue = await requestJson(`/v1/sessions/${state.session.session_id}/audio/phrase`, { method: "POST" });
+    } catch (error) {
+      logLine(`аудио: фраза не выдана (${error.message})`);
+      break;
     }
-    state.audio = {
-      duration_seconds: (performance.now() - started) / 1000,
-    };
-    const form = new FormData();
-    form.append("file", blob, "audio.webm");
-    form.append("phrase_expected", audioStep.payload.phrase);
-    el.stageValue.textContent = "анализ…";
-    setStatus("аудио: анализ");
-    const analysis = await requestForm("/v1/services/audio/analyze", form);
+    audioStep.prompt = issue.phrase;
+    audioStep.payload.phrase = issue.phrase;
+    el.stageValue.textContent = issue.phrase;
+    setStatus("запись аудио");
+
+    let analysis;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      const started = performance.now();
+      const stopCountdown = startCountdown(audioStep.duration_ms || 6000, "ГОВОРИТЕ");
+      el.stepHint.textContent = `Произнесите: «${issue.phrase}»`;
+      let blob;
+      try {
+        blob = await recordStreamBlob(stream, audioStep.duration_ms || 6000);
+      } finally {
+        stopCountdown();
+        stream.getTracks().forEach((track) => track.stop());
+      }
+      state.audio = {
+        duration_seconds: (performance.now() - started) / 1000,
+      };
+      const form = new FormData();
+      form.append("file", blob, "audio.webm");
+      el.stageValue.textContent = "анализ…";
+      setStatus("аудио: анализ");
+      analysis = await requestForm(`/v1/sessions/${state.session.session_id}/audio/analyze`, form);
+    } catch (_error) {
+      state.audio = { duration_seconds: 3.0 };
+      state.serviceEvidence.audio = {
+        phrase_expected: audioStep.payload.phrase,
+        duration_seconds: 3.0,
+        detector: "browser_recording_failed",
+      };
+      state.stepStatus.audio = "unknown";
+      logLine("аудио: запись в браузере не удалась");
+      setStatus("аудио записано");
+      return;
+    }
+
     state.serviceEvidence.audio = analysis.evidence;
     state.stepStatus.audio = analysis.status;
     logCheck("audio", analysis);
     if (analysis.evidence.phrase_transcribed != null) {
       logLine(`аудио: сервер распознал "${analysis.evidence.phrase_transcribed}"`);
     }
-  } catch (_error) {
-    state.audio = { duration_seconds: 3.0 };
-    state.serviceEvidence.audio = {
-      phrase_expected: audioStep.payload.phrase,
-      duration_seconds: 3.0,
-      detector: "browser_recording_failed",
-    };
-    state.stepStatus.audio = "unknown";
-    logLine("аудио: запись в браузере не удалась");
+    if (analysis.status === "passed" || issue.attempts_left <= 0) break;
+    logLine("аудио: не пройдено — новая фраза и повторная запись");
+    setStatus("аудио: повторная попытка");
   }
 
   setStatus("аудио записано");
