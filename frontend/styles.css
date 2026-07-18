@@ -982,6 +982,12 @@ video {
   color: var(--accent-vivid);
 }
 
+.verdict-hint {
+  text-align: center;
+  color: var(--text-muted-on-light);
+  font-size: 14px;
+}
+
 .risk-line {
   min-height: 18px;
   color: var(--text-muted-on-light);
