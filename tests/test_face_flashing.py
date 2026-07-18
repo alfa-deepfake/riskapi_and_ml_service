@@ -65,6 +65,35 @@ def test_responsive_face_passes_all_thresholds():
     assert result.median_center_error <= 0.5
 
 
+def test_colored_flash_pairs_pass_thresholds():
+    # Unnatural saturated flashes on black backgrounds: the expected luma
+    # sequence varies by hue (magenta 105, cyan 172, yellow 226, white 255),
+    # and the reflected tint must match the flash color.
+    colors = [(255, 0, 255), (0, 255, 255), (255, 255, 0), (255, 255, 255)] * 2
+    rng = np.random.default_rng(11)
+    ys, xs = np.mgrid[0:64, 0:64]
+    falloff = np.exp(-(((ys - 32) / 30.0) ** 2 + ((xs - 32) / 30.0) ** 2))
+    pairs = []
+    for index, color in enumerate(colors):
+        base = _base_face(rng)
+        response = 40.0 * falloff[..., None] * (np.asarray(color, dtype=np.float64) / 255.0)
+        lit = np.clip(base + response, 0, 255)
+        pairs.append(
+            LightPair(
+                background_challenge=_challenge("background", (0, 0, 0), pair_index=index),
+                background_rgb=base.astype(np.uint8),
+                lighting_challenge=_challenge("lighting", (0, 0, 0), color, pair_index=index),
+                lighting_rgb=lit.astype(np.uint8),
+            )
+        )
+    result = ActiveLightLivenessVerifier().verify(pairs)
+    assert result.pair_count == len(colors)
+    assert result.score >= 0.55
+    assert result.zero_lag_correlation >= 0.65
+    assert result.median_response_snr >= 0.04
+    assert result.mean_color_cosine >= 0.15
+
+
 def test_unresponsive_face_fails():
     result = ActiveLightLivenessVerifier().verify(_make_pairs(responsive=False))
     assert result.score < 0.4

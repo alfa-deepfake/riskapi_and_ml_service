@@ -78,16 +78,28 @@ def generate_challenge(seed: int | None = None) -> ChallengePlan:
 def _generate_face_flash_pairs(rng: random.Random, *, n_pairs: int = 8) -> list[dict]:
     width = 1280
     height = 720
-    palette = ((0, 0, 0), (255, 255, 255))
-    backgrounds = [rng.choice(palette) for _ in range(n_pairs)]
+    black = (0, 0, 0)
+    white = (255, 255, 255)
+    # Saturated flash colors no ambient lighting produces: a face reflection
+    # matching them (color_cosine) can't come from the environment, and the
+    # random hue adds challenge entropy. All keep ≥40% of white's luma so the
+    # temporal luma correlation still has signal; pure blue is out — skin
+    # reflects it poorly.
+    colored = ((255, 0, 255), (0, 255, 255), (255, 255, 0), (0, 255, 0))
+    backgrounds = [rng.choice((black, white)) for _ in range(n_pairs)]
     # All pairs flashing the same direction makes the temporal correlation
     # degenerate (constant expected sequence) — force both directions in.
     if len(set(backgrounds)) == 1 and n_pairs > 1:
-        backgrounds[-1] = palette[0] if backgrounds[-1] == palette[1] else palette[1]
+        backgrounds[-1] = black if backgrounds[-1] == white else white
+    # Dark pairs flash white or an unnatural color; bright pairs flash to black
+    # (a colored flash on white would darken the screen and muddy the hue).
+    lightings = [rng.choice((white,) + colored) if bg == black else black for bg in backgrounds]
+    if black in backgrounds and not any(light in colored for light in lightings):
+        lightings[backgrounds.index(black)] = rng.choice(colored)
     pairs = []
     for pair_index in range(n_pairs):
         background_rgb = backgrounds[pair_index]
-        lighting_rgb = rng.choice([color for color in palette if color != background_rgb])
+        lighting_rgb = lightings[pair_index]
         stripe_top = 0
         stripe_bottom = height
         pairs.append(
@@ -102,7 +114,9 @@ def _generate_face_flash_pairs(rng: random.Random, *, n_pairs: int = 8) -> list[
                     "stripe_bottom": None,
                     "width": width,
                     "height": height,
-                    "period_seconds": 0.12,
+                    # ≥0.25s per phase → ≤2 flashes/s, under the WCAG 2.3.1
+                    # photosensitivity limit of 3 flashes/s.
+                    "period_seconds": 0.25,
                 },
                 "lighting": {
                     "index": pair_index * 2 + 1,
@@ -114,7 +128,9 @@ def _generate_face_flash_pairs(rng: random.Random, *, n_pairs: int = 8) -> list[
                     "stripe_bottom": stripe_bottom,
                     "width": width,
                     "height": height,
-                    "period_seconds": 0.12,
+                    # ≥0.25s per phase → ≤2 flashes/s, under the WCAG 2.3.1
+                    # photosensitivity limit of 3 flashes/s.
+                    "period_seconds": 0.25,
                 },
             }
         )

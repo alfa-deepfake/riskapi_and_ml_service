@@ -1,6 +1,10 @@
 const appConfig = window.APP_CONFIG || {};
 const TEST_SKIP_ENABLED = Boolean(appConfig.enableTestSkip);
 const LIGHT_SETTLE_MS = Number(appConfig.lightSettleMs || 180);
+// Flash pacing floor: ≥250ms per phase keeps the strobe at ≤2 flashes/s —
+// safely under the WCAG 2.3.1 photosensitivity limit of 3 flashes/s — and
+// gives camera auto-exposure time to react to each change.
+const FLASH_PHASE_MS = Number(appConfig.flashPhaseMs || 250);
 const LIGHT_SAMPLE_COUNT = Number(appConfig.lightSampleCount || 4);
 const LIGHT_SAMPLE_INTERVAL_MS = Number(appConfig.lightSampleIntervalMs || 70);
 // Generous ceiling: the first rPPG call may wait out the ~1min model warmup
@@ -18,8 +22,8 @@ const FLOW = [
   {
     id: "active_light",
     title: "Проверка активным светом",
-    value: "чёрный / белый",
-    hint: "Держите лицо внутри овала, пока экран мигает чёрным и белым.",
+    value: "цветные вспышки",
+    hint: "Держите лицо внутри овала, пока экран мигает цветными вспышками.",
     action: "Запустить вспышки",
   },
   {
@@ -524,20 +528,43 @@ async function runLight() {
 }
 
 async function runFaceFlashLight(pairs) {
-  const manifestPairs = [];
-  const form = new FormData();
   el.currentStep.textContent = "Проверка вспышками света";
   setStatus("вспышки света");
+
+  let analysis = await captureAndAnalyzeFlashPairs(pairs);
+  if (analysis.status !== "passed") {
+    logLine(`активный свет: ${statusRu(analysis.status)} — повторная попытка`);
+    setStatus("свет: повторная попытка");
+    analysis = await captureAndAnalyzeFlashPairs(pairs);
+  }
+
+  state.serviceEvidence.active_light = analysis.evidence;
+  state.stepStatus.active_light = analysis.status;
+  state.expectedLuma = pairs.map((pair) => pair.lighting.lighting_rgb?.[0] ?? 255);
+  state.observedLuma = new Array(pairs.length).fill(0);
+  logCheck("active_light", analysis);
+  setStatus(`свет: ${statusRu(analysis.status)}`);
+}
+
+async function captureAndAnalyzeFlashPairs(pairs) {
+  const manifestPairs = [];
+  const form = new FormData();
 
   await enterFullscreenIfPossible();
   el.flashFullscreen.classList.add("visible");
   state.suppressPulseCollection = true;
   try {
+    // Warmup phase: let auto-exposure settle into the flashing regime before
+    // the first scored capture. This frame is shown but never uploaded.
+    renderFaceFlashFrame(pairs[0].background);
+    el.stageValue.textContent = "ПОДГОТОВКА";
+    await settleFlashPhase();
+
     for (let index = 0; index < pairs.length; index += 1) {
       const pair = pairs[index];
       renderFaceFlashFrame(pair.background);
       el.stageValue.textContent = `ФОН ${index + 1}/${pairs.length}`;
-      await sleep(160);
+      await settleFlashPhase();
       const backgroundFile = `active_light_bg_${index}.png`;
       // The verifier crops faces to 256px — full-res 720p PNGs only bloat the
       // upload (16 files, tens of MB through a tunnel); 640-wide is plenty.
@@ -545,7 +572,7 @@ async function runFaceFlashLight(pairs) {
 
       renderFaceFlashFrame(pair.lighting);
       el.stageValue.textContent = `СВЕТ ${index + 1}/${pairs.length}`;
-      await sleep(160);
+      await settleFlashPhase();
       const lightingFile = `active_light_light_${index}.png`;
       form.append("files", await captureCameraPngBlob(640), lightingFile);
 
@@ -566,13 +593,31 @@ async function runFaceFlashLight(pairs) {
   }
 
   form.append("manifest", JSON.stringify({ pairs: manifestPairs }));
-  const analysis = await requestForm("/v1/services/active-light/analyze-frame-pairs", form);
-  state.serviceEvidence.active_light = analysis.evidence;
-  state.stepStatus.active_light = analysis.status;
-  state.expectedLuma = pairs.map((pair) => pair.lighting.lighting_rgb?.[0] ?? 255);
-  state.observedLuma = new Array(pairs.length).fill(0);
-  logCheck("active_light", analysis);
-  setStatus(`свет: ${statusRu(analysis.status)}`);
+  return requestForm("/v1/services/active-light/analyze-frame-pairs", form);
+}
+
+// The camera pipeline lags the screen by several frames, so a capture right
+// after a flash change often still shows the previous light. Wait out the
+// pacing floor, then require two frames actually sensed under the new light.
+async function settleFlashPhase() {
+  await sleep(FLASH_PHASE_MS);
+  await nextCameraFrames(2);
+}
+
+function nextCameraFrames(count) {
+  return new Promise((resolve) => {
+    if (typeof el.camera.requestVideoFrameCallback !== "function") {
+      window.setTimeout(resolve, count * 67); // ~count frames at 30fps
+      return;
+    }
+    let remaining = count;
+    const tick = () => {
+      remaining -= 1;
+      if (remaining <= 0) resolve();
+      else el.camera.requestVideoFrameCallback(tick);
+    };
+    el.camera.requestVideoFrameCallback(tick);
+  });
 }
 
 function renderFaceFlashFrame(challenge) {

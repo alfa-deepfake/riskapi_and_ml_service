@@ -13,12 +13,22 @@ def test_generate_challenge_contains_required_modalities():
     assert pair["lighting"]["kind"] == "lighting"
     assert pair["lighting"]["lighting_rgb"] is not None
     assert pair["lighting"]["stripe_top"] is not None
-    allowed_colors = ([0, 0, 0], [255, 255, 255])
+    monochrome = ([0, 0, 0], [255, 255, 255])
+    colored = ([255, 0, 255], [0, 255, 255], [255, 255, 0], [0, 255, 0])
+    lightings = []
     for pair in active_light.payload["face_flash_pairs"]:
-        assert pair["background"]["background_rgb"] in allowed_colors
-        assert pair["lighting"]["background_rgb"] in allowed_colors
-        assert pair["lighting"]["lighting_rgb"] in allowed_colors
+        assert pair["background"]["background_rgb"] in monochrome
+        assert pair["lighting"]["background_rgb"] in monochrome
+        assert pair["lighting"]["lighting_rgb"] in monochrome + colored
         assert pair["lighting"]["stripe_top"] == 0
         assert pair["lighting"]["stripe_bottom"] == pair["lighting"]["height"]
+        # Photosensitivity floor: ≤2 flashes/s (WCAG 2.3.1 limit is 3/s).
+        assert pair["lighting"]["period_seconds"] >= 0.25
+        lightings.append(pair["lighting"]["lighting_rgb"])
+    # Every session gets at least one unnatural colored flash (color evidence)
+    # and both flash directions (non-degenerate temporal correlation).
+    assert any(light in colored for light in lightings)
+    backgrounds = {tuple(pair["background"]["background_rgb"]) for pair in active_light.payload["face_flash_pairs"]}
+    assert backgrounds == {(0, 0, 0), (255, 255, 255)}
     assert challenge.steps[1].payload["expected_action"]
     assert challenge.steps[2].payload["phrase"]
