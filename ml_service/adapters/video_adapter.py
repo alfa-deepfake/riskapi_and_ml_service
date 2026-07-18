@@ -111,7 +111,8 @@ class VideoModelAdapter:
                 "threshold": threshold,
                 "model_name": self._model_name(),
                 "frame_count": frame_count,
-                "face_present": False,
+                # zero decoded frames is "unknown", not a hard no-face fail
+                "face_present": False if frame_count else None,
                 "face_confidence": 0.0,
                 "device": str(device),
                 "input_modes": input_modes,

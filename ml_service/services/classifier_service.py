@@ -10,14 +10,14 @@ from starlette.concurrency import run_in_threadpool
 from ml_service.api.schemas import ClassifierEvidence, ServiceAnalyzeResponse
 from ml_service.config import settings
 from ml_service.core.checks import score_classifier
-from ml_service.services.common import read_upload, service_response, unavailable_check
+from ml_service.services.common import read_upload, safe_suffix, service_response, unavailable_check
 
 
 class ClassifierService:
     name = "classifier"
 
     async def analyze_video(self, file: UploadFile, *, face_present: bool | None, face_confidence: float | None) -> ServiceAnalyzeResponse:
-        suffix = Path(file.filename or "video.webm").suffix or ".webm"
+        suffix = safe_suffix(file.filename, ".webm")
         error_message = None
         with NamedTemporaryFile(suffix=suffix, delete=True) as tmp:
             tmp.write(await read_upload(file))

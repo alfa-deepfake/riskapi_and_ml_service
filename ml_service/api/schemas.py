@@ -22,9 +22,9 @@ class HealthResponse(BaseModel):
 class SessionCreateRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    uid: str = Field(..., min_length=1)
-    check_id: str = Field(..., min_length=1)
-    scenario: str = Field(default="video_verification", min_length=1)
+    uid: str = Field(..., min_length=1, max_length=200)
+    check_id: str = Field(..., min_length=1, max_length=200)
+    scenario: str = Field(default="video_verification", min_length=1, max_length=200)
 
 
 class SessionResponse(BaseModel):
@@ -64,10 +64,10 @@ class ClassifierEvidence(BaseModel):
 
 class ActiveLightEvidence(BaseModel):
     skipped: bool = False
-    expected_luma: list[float] = Field(default_factory=list)
-    observed_face_luma: list[float] = Field(default_factory=list)
-    observed_background_luma: list[float] = Field(default_factory=list)
-    frame_timestamps_ms: list[float] = Field(default_factory=list)
+    expected_luma: list[float] = Field(default_factory=list, max_length=1_000)
+    observed_face_luma: list[float] = Field(default_factory=list, max_length=1_000)
+    observed_background_luma: list[float] = Field(default_factory=list, max_length=1_000)
+    frame_timestamps_ms: list[float] = Field(default_factory=list, max_length=1_000)
     detector: str | None = None
     verifier_score: float | None = Field(default=None, ge=0.0, le=1.0)
     pair_count: int | None = Field(default=None, ge=0)
@@ -88,7 +88,9 @@ class RppgEvidence(BaseModel):
     signal_quality: float | None = Field(default=None, ge=0.0, le=1.0)
     latency: float | None = Field(default=None, ge=0.0)
     hrv: dict[str, float | None] = Field(default_factory=dict)
-    samples: list[float] = Field(default_factory=list)
+    # 2 minutes at 100 Hz with headroom — enough for any real capture, small
+    # enough that the O(n^2/stride) stability scan stays cheap.
+    samples: list[float] = Field(default_factory=list, max_length=20_000)
     sample_rate_hz: float | None = Field(default=None, gt=0.0)
     window_seconds: float | None = Field(default=None, gt=0.0)
     detector: str | None = None
@@ -110,8 +112,10 @@ class GestureEvidence(BaseModel):
 
 class AudioEvidence(BaseModel):
     skipped: bool = False
-    phrase_expected: str | None = None
-    phrase_transcribed: str | None = None
+    # Challenge phrases are ~30 chars; the cap keeps attacker-supplied strings
+    # out of the O(n*m) levenshtein that runs on the event loop.
+    phrase_expected: str | None = Field(default=None, max_length=500)
+    phrase_transcribed: str | None = Field(default=None, max_length=2000)
     ai_probability: float | None = Field(default=None, ge=0.0, le=1.0)
     speaker_match_probability: float | None = Field(default=None, ge=0.0, le=1.0)
     duration_seconds: float | None = Field(default=None, ge=0.0)
@@ -129,8 +133,8 @@ class EvidenceBundle(BaseModel):
 class ScoreRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    uid: str = Field(..., min_length=1)
-    check_id: str | None = Field(default=None, min_length=1)
+    uid: str = Field(..., min_length=1, max_length=200)
+    check_id: str | None = Field(default=None, min_length=1, max_length=200)
     challenge: ChallengePlan | None = None
     evidence: EvidenceBundle = Field(default_factory=EvidenceBundle)
 
@@ -138,8 +142,8 @@ class ScoreRequest(BaseModel):
 class EvidenceRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    uid: str = Field(..., min_length=1)
-    check_id: str = Field(..., min_length=1)
+    uid: str = Field(..., min_length=1, max_length=200)
+    check_id: str = Field(..., min_length=1, max_length=200)
     evidence: EvidenceBundle = Field(default_factory=EvidenceBundle)
 
     def to_score_request(self, challenge: ChallengePlan) -> ScoreRequest:
@@ -176,14 +180,14 @@ class ServiceAnalyzeResponse(BaseModel):
 
 
 class ActiveLightAnalyzeRequest(BaseModel):
-    expected_luma: list[float] = Field(default_factory=list)
-    observed_face_luma: list[float] = Field(default_factory=list)
+    expected_luma: list[float] = Field(default_factory=list, max_length=1_000)
+    observed_face_luma: list[float] = Field(default_factory=list, max_length=1_000)
     face_present: bool | None = None
     face_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class RppgAnalyzeRequest(BaseModel):
-    samples: list[float] = Field(default_factory=list)
+    samples: list[float] = Field(default_factory=list, max_length=20_000)
     sample_rate_hz: float = Field(default=10.0, gt=0.0)
     window_seconds: float = Field(default=4.0, gt=0.0)
     face_present: bool | None = None

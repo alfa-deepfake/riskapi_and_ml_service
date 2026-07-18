@@ -59,7 +59,9 @@ def _decision(checks: list[CheckScore], risk_score: float, *, allow_threshold: f
     # liveness signal still blocks "allow" — it must not be averaged away.
     if risk_score >= deny_threshold:
         return "deny"
-    hard_checks = {"active_light", "rppg", "gesture", "audio"}
+    # The classifier is hard too: a session must not be allowed when the
+    # primary deepfake detector produced no verdict at all.
+    hard_checks = {"classifier", "active_light", "rppg", "gesture", "audio"}
     if any(check.status == "failed" for check in checks):
         return "review"
     if any(check.status in ("unknown", "skipped") for check in checks if check.name in hard_checks):

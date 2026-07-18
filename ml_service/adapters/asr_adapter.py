@@ -42,16 +42,39 @@ class WhisperAsrAdapter:
             with _ASR_LOCK:
                 segments, _ = model.transcribe(
                     str(wav_path),
-                    beam_size=1,
-                    best_of=1,
                     language="ru",
                     task="transcribe",
+                    # Anti-hallucination recipe. Greedy (beam_size=1) plus the
+                    # default temperature fallback made Whisper emit a canned
+                    # phrase ("Я не могу это сделать") on quiet speech it could
+                    # not resolve. Beam search + a single temperature=0 kill that
+                    # resampling cascade; the thresholds drop low-confidence /
+                    # repetitive decodes instead of returning them.
+                    beam_size=5,
+                    temperature=0.0,
                     condition_on_previous_text=False,
                     without_timestamps=True,
+                    compression_ratio_threshold=2.4,
+                    log_prob_threshold=-1.0,
+                    no_speech_threshold=0.6,
+                    # Trim non-speech first (Silero VAD ships with faster-whisper,
+                    # onnxruntime is in the image). A permissive threshold keeps
+                    # quiet speech that the default 0.5 would drop and leave
+                    # Whisper hallucinating on the noise that remains.
+                    vad_filter=True,
+                    vad_parameters={"threshold": 0.3, "min_silence_duration_ms": 500},
                 )
                 # ``segments`` is a generator; consume it under the lock so a
                 # concurrent request cannot run inference through the same model.
-                return " ".join(segment.text.strip() for segment in segments).strip()
+                # Belt-and-braces: skip segments Whisper flags as probably-silence
+                # — but, mirroring Whisper's own gating, only when the decode is
+                # also unconfident. Quiet Russian speech decoded confidently
+                # (high avg_logprob) must not be dropped.
+                return " ".join(
+                    segment.text.strip()
+                    for segment in segments
+                    if segment.no_speech_prob < 0.6 or segment.avg_logprob > -1.0
+                ).strip()
         finally:
             if wav_path != audio_path:
                 wav_path.unlink(missing_ok=True)

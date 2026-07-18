@@ -31,10 +31,21 @@ class FaceExtractor:
 
     def __init__(self, *, crop_size: int = FACE_CROP_SIZE, min_confidence: float = 0.5) -> None:
         self.crop_size = crop_size
-        self._detector = mp.solutions.face_detection.FaceDetection(
-            model_selection=0, min_detection_confidence=min_confidence
-        )
+        # Short-range model (0) is tuned for selfie distance; the full-range
+        # model (1) covers faces beyond ~2m / small in wide-FOV frames. Try
+        # short-range first, fall back to full-range on a miss.
+        self._detectors = [
+            mp.solutions.face_detection.FaceDetection(
+                model_selection=selection, min_detection_confidence=min_confidence
+            )
+            for selection in (0, 1)
+        ]
         self._last_box: tuple[int, int, int, int] | None = None
+
+    def close(self) -> None:
+        """Release the mediapipe graphs — GC does not free their native memory."""
+        for detector in self._detectors:
+            detector.close()
 
     def extract(self, image_rgb: np.ndarray, *, allow_reuse: bool = False) -> ExtractedFace | None:
         box = self._detect_box(image_rgb)
@@ -51,8 +62,12 @@ class FaceExtractor:
         return ExtractedFace(image_rgb=crop, box=box)
 
     def _detect_box(self, image_rgb: np.ndarray) -> tuple[int, int, int, int] | None:
-        results = self._detector.process(image_rgb)
-        if not results.detections:
+        results = None
+        for detector in self._detectors:
+            results = detector.process(image_rgb)
+            if results.detections:
+                break
+        if not results or not results.detections:
             return None
         best = max(
             results.detections,

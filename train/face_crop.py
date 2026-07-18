@@ -24,8 +24,41 @@ def _app():
             from insightface.app import FaceAnalysis
             _APP = FaceAnalysis(name="buffalo_l",
                                 providers=["CUDAExecutionProvider", "CPUExecutionProvider"])
-            _APP.prepare(ctx_id=0, det_size=(512, 512))
+            # 640 is SCRFD's native input — better recall than 512 at both
+            # scale extremes (tiny faces in wide 4K frames, big close-ups).
+            _APP.prepare(ctx_id=0, det_size=(640, 640))
     return _APP
+
+
+def _detect_faces(img_bgr: np.ndarray) -> list:
+    """Detect with retries covering the camera-resolution extremes.
+
+    SCRFD resizes the frame aspect-fit into det_size, so what matters is the
+    face size *relative to the frame*: a close-up selfie face (>~80% of the
+    frame) overshoots the anchor range, a far-away face in a wide 4K frame
+    undershoots it. Retry zoomed out (padded border) for the former and on
+    the center crop for the latter (the UI guides the face into a centered
+    oval), mapping geometry back to source coordinates either way.
+    """
+    app = _app()
+    faces = app.get(img_bgr)
+    if faces:
+        return faces
+    height, width = img_bgr.shape[:2]
+    pad_y, pad_x = height // 3, width // 3
+    padded = cv2.copyMakeBorder(img_bgr, pad_y, pad_y, pad_x, pad_x, cv2.BORDER_CONSTANT)
+    faces = app.get(padded)
+    if faces:
+        for face in faces:
+            face.bbox = face.bbox - np.array([pad_x, pad_y, pad_x, pad_y], dtype=face.bbox.dtype)
+            face.kps = face.kps - np.array([[pad_x, pad_y]], dtype=face.kps.dtype)
+        return faces
+    y0, x0 = height // 4, width // 4
+    faces = app.get(np.ascontiguousarray(img_bgr[y0:height - y0, x0:width - x0]))
+    for face in faces:
+        face.bbox = face.bbox + np.array([x0, y0, x0, y0], dtype=face.bbox.dtype)
+        face.kps = face.kps + np.array([[x0, y0]], dtype=face.kps.dtype)
+    return faces
 
 
 last_face_px: float | None = None  # max side of the last detected bbox (source pixels)
@@ -39,7 +72,7 @@ def crop_face_bgr(img_bgr: np.ndarray, size: int = 512) -> np.ndarray | None:
     the HF-loss signature; callers should gate verdicts on it.
     """
     global last_face_px
-    faces = _app().get(img_bgr)
+    faces = _detect_faces(img_bgr)
     if not faces:
         last_face_px = None
         return None

@@ -10,7 +10,7 @@ from starlette.concurrency import run_in_threadpool
 from ml_service.api.schemas import AudioEvidence, ServiceAnalyzeResponse
 from ml_service.config import settings
 from ml_service.core.checks import score_audio
-from ml_service.services.common import read_upload, service_response, unavailable_check
+from ml_service.services.common import read_upload, safe_suffix, service_response, unavailable_check
 
 
 class AudioService:
@@ -25,7 +25,11 @@ class AudioService:
     ) -> ServiceAnalyzeResponse:
         # phrase_transcribed from the client is accepted for API compatibility
         # but never trusted: the transcript is produced by server-side ASR.
-        suffix = Path(file.filename or "audio.webm").suffix or ".webm"
+        # Cap the client phrase before it reaches the length-validated schema
+        # (an over-long value would otherwise 500 on model construction).
+        if phrase_expected is not None:
+            phrase_expected = phrase_expected[:500]
+        suffix = safe_suffix(file.filename, ".webm")
         with NamedTemporaryFile(suffix=suffix, delete=True) as tmp:
             tmp.write(await read_upload(file))
             tmp.flush()
@@ -75,6 +79,20 @@ def _run_asr(audio_path: Path) -> str | None:
         ).transcribe(audio_path)
     except Exception:
         return None
+
+
+def warm_audio_model() -> None:
+    """Preload the WavLM anti-spoof model; lru_cache does not dedupe concurrent
+    first calls, so without warmup two simultaneous first uploads each build a
+    full model. Never raises."""
+    model_path = Path(settings.audio_model_path)
+    if not model_path.exists():
+        return
+    try:
+        from ml_service.adapters.audio_adapter import _load_model
+        _load_model(str(model_path), "auto")
+    except Exception:
+        return
 
 
 def warm_asr_model() -> None:
