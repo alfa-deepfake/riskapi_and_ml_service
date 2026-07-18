@@ -76,6 +76,8 @@ const state = {
   gestureDone: false,
   pulse: null,
   audio: null,
+  audioReady: false,
+  audioStream: null,
   deepfakeMode: false,
 };
 
@@ -364,8 +366,18 @@ function renderStep() {
   el.currentStep.textContent = `Шаг ${state.stepIndex + 1}/${FLOW.length} — ${step.title}`;
   el.stageValue.textContent = displayValue(step);
   el.stepHint.textContent = displayHint(step);
-  el.primaryAction.textContent = step.action;
+  el.primaryAction.textContent = actionLabel(step);
   updateTools();
+}
+
+// The audio step is two-phase: enable the microphone (grant permission),
+// then start recording on a second press — recording never starts the moment
+// the device is picked.
+function actionLabel(step) {
+  if (step.id === "audio" && state.session) {
+    return state.audioReady ? "Начать запись" : "Включить микрофон";
+  }
+  return step.action;
 }
 
 function fmt(value, digits = 2) {
@@ -434,7 +446,9 @@ function displayValue(step) {
 
 function displayHint(step) {
   if (step.id === "audio") {
-    return "Произнесите фразу вслух — сервер распознает и проверит её.";
+    return state.audioReady
+      ? "Микрофон включён. Нажмите «Начать запись» и произнесите фразу."
+      : "Нажмите «Включить микрофон», затем произнесите фразу.";
   }
   return step.hint;
 }
@@ -481,6 +495,7 @@ function resetEvidence() {
   state.gestureDone = false;
   state.pulse = null;
   state.audio = null;
+  stopAudioStream();
   state.pulseSamples = [];
   state.facePresent = null;
   state.faceConfidence = null;
@@ -532,8 +547,9 @@ el.primaryAction.addEventListener("click", async () => {
     el.primaryAction.disabled = true;
     el.startVerification.disabled = true;
     el.resetFlow.disabled = true;
-    await runStep(step.id);
-    if (step.id !== "score") {
+    // A step may ask to stay (audio: enable mic now, record on the next press).
+    const stay = await runStep(step.id);
+    if (step.id !== "score" && !stay) {
       advance();
     }
   } catch (error) {
@@ -902,29 +918,48 @@ async function samplePulse() {
   setStatus("пульс замерен");
 }
 
+function stopAudioStream() {
+  state.audioReady = false;
+  if (state.audioStream) {
+    state.audioStream.getTracks().forEach((track) => track.stop());
+    state.audioStream = null;
+  }
+}
+
 async function recordAudio() {
   const audioStep = getStep("audio_phrase");
+
+  // Фаза 1: включить микрофон (запросить доступ) и ждать явного старта —
+  // запись не начинается сразу после выбора устройства. Ошибка доступа
+  // пробрасывается наверх, шаг не продвигается, кнопка остаётся «Включить
+  // микрофон» для повторной попытки.
+  if (!state.audioReady) {
+    state.audioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    state.audioReady = true;
+    setStatus("микрофон включён");
+    return true; // остаёмся на шаге до нажатия «Начать запись»
+  }
+
+  // Фаза 2: запись и анализ. Только сбой самой записи даёт честный "unknown"
+  // и пропускает шаг; ошибка серверного анализа пробрасывается наверх.
   el.stageValue.textContent = audioStep.prompt;
   setStatus("запись аудио");
-
-  // Только сбой ЗАПИСИ (нет микрофона) даёт честный "unknown" и пропускает
-  // шаг. Ошибка серверного анализа пробрасывается наверх — шаг не
-  // продвигается, пользователь может повторить.
   let blob;
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    const stream = state.audioStream;
     const started = performance.now();
     const stopCountdown = startCountdown(audioStep.duration_ms || 4000, "ГОВОРИТЕ");
     try {
       blob = await recordStreamBlob(stream, audioStep.duration_ms || 4000);
     } finally {
       stopCountdown();
-      stream.getTracks().forEach((track) => track.stop());
+      stopAudioStream();
     }
     state.audio = {
       duration_seconds: (performance.now() - started) / 1000,
     };
   } catch (_error) {
+    stopAudioStream();
     state.audio = { duration_seconds: 0 };
     state.serviceEvidence.audio = {
       phrase_expected: audioStep.payload.phrase,
@@ -1118,6 +1153,7 @@ function applySkipEvidence(id) {
     el.pulseMetric.textContent = "пропущено";
   }
   if (id === "audio") {
+    stopAudioStream();
     state.audio = { duration_seconds: 0 };
     state.serviceEvidence.audio = { skipped: true };
     el.audioMetric.textContent = "пропущено";
