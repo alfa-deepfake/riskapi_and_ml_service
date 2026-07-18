@@ -133,7 +133,7 @@ const STATUS_RU = {
   skipped: "пропущено",
   pending: "ожидание",
   allow: "разрешено",
-  review: "проверка",
+  review: "требуется проверка",
   deny: "отказано",
 };
 
@@ -196,14 +196,13 @@ const REASON_RU = {
   "frame classifier cannot pass without a detected face": "классификатор кадров не может пройти без обнаруженного лица",
   "frame classifier evidence is missing": "данные классификатора кадров отсутствуют",
   "AI restoration/upscaling detected on the input — rejected": "обнаружено ИИ-восстановление/апскейл входных данных — отклонено",
-  "low-detail input — fake verdict withheld (signal unreliable)": "мало деталей во входных данных — вердикт о подделке отложен (сигнал ненадёжен)",
   "deepfake classifier probability evaluated": "оценена вероятность дипфейка классификатором",
   "active light evidence is missing": "данные активного света отсутствуют",
   "active light cannot pass without a detected face": "активный свет не может пройти без обнаруженного лица",
   "face flashing frame-pair verifier evaluated": "проверены пары кадров вспышек света",
   "not enough active light samples": "недостаточно образцов активного света",
   "active light correlation is undefined": "корреляция активного света не определена",
-  "face luminance response compared with screen challenge": "яркость лица сопоставлена с вспышками экрана",
+  "face luminance response compared with screen challenge": "яркость лица сопоставлена со вспышками экрана",
   "rPPG evidence is missing": "данные rPPG отсутствуют",
   "rPPG cannot pass without a detected face ROI": "rPPG не может пройти без обнаруженной области лица",
   "rPPG raw samples are required": "требуются исходные образцы rPPG",
@@ -223,10 +222,37 @@ const REASON_RU = {
   "check skipped in test mode": "проверка пропущена в тестовом режиме",
   "video classifier model is not configured": "модель видео-классификатора не настроена",
   "audio anti-spoof model is not configured": "анти-спуфинг модель аудио не настроена",
+  "rPPG runtime dependency is missing: pip install open-rppg": "среда выполнения rPPG не установлена на сервере",
+  "could not open gesture video": "не удалось открыть видео жеста",
+  "gesture runtime requires opencv-python": "для распознавания жестов на сервере требуется opencv-python",
+  "gesture runtime requires mediapipe": "для распознавания жестов на сервере требуется mediapipe",
+  "invalid face_flashing manifest": "некорректный манифест вспышек света",
+  "face_flashing manifest has no pairs": "в манифесте вспышек света нет пар",
+  "no valid face frame pairs for face_flashing verifier": "нет валидных пар кадров с лицом для проверки вспышками",
 };
 
+// Dynamic server reasons carry a variable tail (a number or exception type);
+// match by pattern and rebuild the sentence in Russian.
+const REASON_RU_PATTERNS = [
+  [/^forensic override: trees ([\d.]+) on low-detail input — REAL verdict withheld$/,
+    (m) => `форензик-переопределение: деревья ${m[1]} при малой детализации кадра — вердикт «не дипфейк» отклонён`],
+  [/^video classifier inference failed: (.+)$/, (m) => `сбой видео-классификатора: ${m[1]}`],
+  [/^audio anti-spoof inference failed: (.+)$/, (m) => `сбой анти-спуфинг модели аудио: ${m[1]}`],
+  [/^rPPG (?:runtime|model load|inference) failed: (.+)$/, (m) => `сбой rPPG: ${m[1]}`],
+  [/^gesture inference failed: (.+)$/, (m) => `сбой распознавания жеста: ${m[1]}`],
+  [/^unsupported gesture action: (.+)$/, (m) => `неподдерживаемое действие жеста: ${m[1]}`],
+  [/^face_flashing runtime is unavailable: (.+)$/, (m) => `модуль вспышек света недоступен: ${m[1]}`],
+  [/^active light verification failed: (.+)$/, (m) => `сбой проверки активным светом: ${m[1]}`],
+];
+
 function reasonRu(value) {
-  return value == null ? value : REASON_RU[value] || value;
+  if (value == null) return value;
+  if (REASON_RU[value]) return REASON_RU[value];
+  for (const [pattern, build] of REASON_RU_PATTERNS) {
+    const match = pattern.exec(value);
+    if (match) return build(match);
+  }
+  return value;
 }
 
 // A score factor is "<check name>: <reason>" (or "…: insufficient evidence").
@@ -267,14 +293,42 @@ async function fetchChecked(path, options) {
       throw new Error(`Нет ответа от ${path} за ${Math.round(REQUEST_TIMEOUT_MS / 1000)}с`);
     }
     logLine(`${path}: сетевая ошибка — ${error?.message || error}`);
-    throw error;
+    throw new Error(`Сетевая ошибка: сервер недоступен (${error?.message || error})`);
   }
   if (!response.ok) {
     const detail = await response.text();
     logLine(`${path}: HTTP ${response.status}`);
-    throw new Error(`${response.status}: ${detail}`);
+    // 422 — машинный JSON валидации FastAPI, человеку он не нужен.
+    if (response.status === 422) {
+      throw new Error("Сервер отклонил данные запроса (некорректный формат)");
+    }
+    throw new Error(`Ошибка ${response.status}: ${extractDetail(detail)}`);
   }
   return response.json();
+}
+
+// FastAPI оборачивает сообщение в {"detail": "..."} — достаём его для алерта.
+function extractDetail(body) {
+  try {
+    const parsed = JSON.parse(body);
+    if (typeof parsed?.detail === "string") return parsed.detail;
+  } catch (_error) {
+    // не JSON — показываем как есть
+  }
+  return body;
+}
+
+// Ошибки камеры/микрофона приходят от браузера по-английски.
+const MEDIA_ERROR_RU = {
+  NotAllowedError: "Доступ к камере/микрофону запрещён — разрешите его в браузере",
+  NotFoundError: "Камера или микрофон не найдены",
+  NotReadableError: "Камера занята другим приложением",
+  OverconstrainedError: "Камера не поддерживает требуемое разрешение",
+  SecurityError: "Доступ к камере заблокирован настройками безопасности",
+};
+
+function errorMessageRu(error) {
+  return MEDIA_ERROR_RU[error?.name] || error?.message || String(error);
 }
 
 async function requestJson(path, options = {}) {
@@ -333,7 +387,17 @@ function logCheck(name, analysis) {
   const check = analysis.check || {};
   const risk = check.risk != null ? ` · риск ${fmt(check.risk)}` : "";
   const reason = check.reason ? ` — ${reasonRu(check.reason)}` : "";
-  logLine(`${name}: ${statusRu(analysis.status)}${risk}${reason}`);
+  logLine(`${checkNameRu(name)}: ${statusRu(analysis.status)}${risk}${reason}`);
+}
+
+// Русская форма множественного числа: ruPlural(3, ["пара", "пары", "пар"]).
+function ruPlural(count, forms) {
+  const abs = Math.abs(count) % 100;
+  const last = abs % 10;
+  if (abs > 10 && abs < 20) return forms[2];
+  if (last === 1) return forms[0];
+  if (last >= 2 && last <= 4) return forms[1];
+  return forms[2];
 }
 
 // Countdown in the stage header while MediaRecorder runs, so a 5-9s silent
@@ -456,7 +520,7 @@ el.startVerification.addEventListener("click", async () => {
     renderStep();
   } catch (error) {
     setStatus("ошибка сессии");
-    alert(error.message);
+    alert(errorMessageRu(error));
   }
 });
 
@@ -464,15 +528,20 @@ el.primaryAction.addEventListener("click", async () => {
   if (!state.session) return;
   const step = currentFlowStep();
   try {
+    // Пока шаг выполняется, рестарт/сброс смешали бы evidence двух сессий.
     el.primaryAction.disabled = true;
+    el.startVerification.disabled = true;
+    el.resetFlow.disabled = true;
     await runStep(step.id);
     if (step.id !== "score") {
       advance();
     }
   } catch (error) {
-    setStatus(`ошибка: ${step.id}`);
-    alert(error.message);
+    setStatus(`ошибка: ${step.title}`);
+    alert(errorMessageRu(error));
   } finally {
+    el.startVerification.disabled = false;
+    el.resetFlow.disabled = false;
     renderStep();
   }
 });
@@ -504,8 +573,15 @@ async function runStep(id) {
 
 // The XGB forensic classifier needs the face near its 512px training crop;
 // the browser default 640x480 leaves faces ~200px and its verdict gated off.
+// Capped at 1080p: virtual/4K cameras that expose only their native mode
+// otherwise deliver frames whose bitrate budget smears the forensic detail
+// (browsers downscale to satisfy max, so this never blocks a camera).
 async function videoConstraints() {
-  const base = { width: { ideal: 1280 }, height: { ideal: 720 } };
+  const base = {
+    width: { ideal: 1280, max: 1920 },
+    height: { ideal: 720, max: 1080 },
+    frameRate: { ideal: 30 },
+  };
   if (!state.deepfakeMode) return base;
   const devices = await navigator.mediaDevices.enumerateDevices();
   const cam = devices.find(
@@ -524,6 +600,12 @@ function updateDeepfakeUi() {
 }
 
 async function openCamera() {
+  // A rerun must not stack a second live stream on top of the first —
+  // the old track keeps the camera busy and the LED on.
+  if (state.stream) {
+    state.stream.getTracks().forEach((track) => track.stop());
+    state.stream = null;
+  }
   state.stream = await navigator.mediaDevices.getUserMedia({
     video: await videoConstraints(),
     audio: false,
@@ -537,13 +619,12 @@ el.deepfakeToggle.addEventListener("change", async () => {
   updateDeepfakeUi();
   if (!state.stream) return;
   try {
-    state.stream.getTracks().forEach((track) => track.stop());
     await openCamera();
     logLine(`deepfake-режим: ${state.deepfakeMode ? "включён — сервер подаёт дипфейковое лицо" : "выключен — чистый видеопоток"}`);
     setStatus(`deepfake: ${state.deepfakeMode ? "вкл" : "выкл"}`);
   } catch (error) {
     setStatus("ошибка переключения камеры");
-    alert(error.message);
+    alert(errorMessageRu(error));
   }
 });
 
@@ -556,6 +637,10 @@ async function startCamera() {
   startFaceWatch();
   startPulseCollection();
   logLine(`камера: поток запущен (${el.camera.videoWidth}x${el.camera.videoHeight})`);
+  if (el.camera.videoWidth > 0 && el.camera.videoWidth < 640) {
+    logLine("камера: низкое разрешение — лицо может быть слишком мелким для форензики, точность проверки снижена");
+    el.guideHint.textContent = "Низкое разрешение камеры — придвиньтесь ближе к камере";
+  }
   setStatus("камера готова");
 }
 
@@ -611,16 +696,10 @@ async function runLight() {
     await updateFacePresence();
   }
   if (state.facePresent === false) {
-    const analysis = await requestJson("/v1/services/active-light/analyze", {
-      method: "POST",
-      body: JSON.stringify({ face_present: false, face_confidence: state.faceConfidence ?? 0 }),
-    });
-    state.serviceEvidence.active_light = analysis.evidence;
-    state.stepStatus.active_light = analysis.status;
-    el.lightMetric.textContent = metricText(statusRu(analysis.status), ["лицо не в кадре"]);
-    logCheck("active_light", analysis);
-    setStatus(`свет: ${statusRu(analysis.status)}`);
-    return;
+    // Не фиксируем провал навсегда: три сэмпла FaceDetector могут дать ложный
+    // минус (поворот головы, смаз). Шаг не продвигается — можно повторить.
+    el.lightMetric.textContent = "лицо не в кадре";
+    throw new Error("Лицо не найдено в кадре — совместите лицо с овалом и повторите шаг");
   }
   if (Array.isArray(step.payload.face_flash_pairs) && step.payload.face_flash_pairs.length) {
     return runFaceFlashLight(step.payload.face_flash_pairs);
@@ -720,7 +799,9 @@ async function runFaceFlashLight(pairs) {
   state.observedLuma = new Array(pairs.length).fill(0);
   el.lightMetric.textContent = metricText(statusRu(analysis.status), [
     analysis.evidence.verifier_score != null ? `оценка ${fmt(analysis.evidence.verifier_score)}` : "",
-    analysis.evidence.pair_count != null ? `${analysis.evidence.pair_count} пар` : "",
+    analysis.evidence.pair_count != null
+      ? `${analysis.evidence.pair_count} ${ruPlural(analysis.evidence.pair_count, ["пара", "пары", "пар"])}`
+      : "",
   ]);
   logCheck("active_light", analysis);
   setStatus(`свет: ${statusRu(analysis.status)}`);
@@ -800,11 +881,14 @@ async function samplePulse() {
     el.stageValue.textContent = `${index + 1}/80`;
     await sleep(100);
   }
-  state.pulse = estimatePulse(getPulseValues());
+  // только окно замера: вся 120с история содержит разрывы (вспышки,
+  // скрытая вкладка) и не является равномерным потоком 10 Гц
+  const window = getPulseValues().slice(-80);
+  state.pulse = estimatePulse(window);
   const analysis = await requestJson("/v1/services/rppg/analyze", {
     method: "POST",
     body: JSON.stringify({
-      samples: getPulseValues(),
+      samples: window,
       sample_rate_hz: 10,
       window_seconds: 4,
       face_present: state.facePresent,
@@ -823,11 +907,14 @@ async function recordAudio() {
   el.stageValue.textContent = audioStep.prompt;
   setStatus("запись аудио");
 
+  // Только сбой ЗАПИСИ (нет микрофона) даёт честный "unknown" и пропускает
+  // шаг. Ошибка серверного анализа пробрасывается наверх — шаг не
+  // продвигается, пользователь может повторить.
+  let blob;
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     const started = performance.now();
     const stopCountdown = startCountdown(audioStep.duration_ms || 4000, "ГОВОРИТЕ");
-    let blob;
     try {
       blob = await recordStreamBlob(stream, audioStep.duration_ms || 4000);
     } finally {
@@ -837,35 +924,37 @@ async function recordAudio() {
     state.audio = {
       duration_seconds: (performance.now() - started) / 1000,
     };
-    const form = new FormData();
-    form.append("file", blob, "audio.webm");
-    form.append("phrase_expected", audioStep.payload.phrase);
-    el.stageValue.textContent = "анализ…";
-    setStatus("аудио: анализ");
-    const analysis = await requestForm("/v1/services/audio/analyze", form);
-    state.serviceEvidence.audio = analysis.evidence;
-    state.stepStatus.audio = analysis.status;
-    el.phraseInput.value = analysis.evidence.phrase_transcribed ?? "(нет транскрипта)";
-    el.audioMetric.textContent = metricText(statusRu(analysis.status), [
-      analysis.evidence.ai_probability != null ? `ИИ ${fmt(analysis.evidence.ai_probability)}` : "модель недоступна",
-      analysis.evidence.duration_seconds != null ? `${fmt(analysis.evidence.duration_seconds, 1)}с` : "",
-    ]);
-    logCheck("audio", analysis);
-    if (analysis.evidence.phrase_transcribed != null) {
-      logLine(`аудио: сервер распознал "${analysis.evidence.phrase_transcribed}"`);
-    }
   } catch (_error) {
-    state.audio = { duration_seconds: 3.0 };
+    state.audio = { duration_seconds: 0 };
     state.serviceEvidence.audio = {
       phrase_expected: audioStep.payload.phrase,
-      duration_seconds: 3.0,
+      duration_seconds: 0,
       detector: "browser_recording_failed",
     };
     state.stepStatus.audio = "unknown";
     el.audioMetric.textContent = statusRu("unknown");
     logLine("аудио: запись в браузере не удалась");
+    setStatus("аудио записано");
+    return;
   }
 
+  const form = new FormData();
+  form.append("file", blob, "audio.webm");
+  form.append("phrase_expected", audioStep.payload.phrase);
+  el.stageValue.textContent = "анализ…";
+  setStatus("аудио: анализ");
+  const analysis = await requestForm("/v1/services/audio/analyze", form);
+  state.serviceEvidence.audio = analysis.evidence;
+  state.stepStatus.audio = analysis.status;
+  el.phraseInput.value = analysis.evidence.phrase_transcribed ?? "(нет транскрипта)";
+  el.audioMetric.textContent = metricText(statusRu(analysis.status), [
+    analysis.evidence.ai_probability != null ? `ИИ ${fmt(analysis.evidence.ai_probability)}` : "модель недоступна",
+    analysis.evidence.duration_seconds != null ? `${fmt(analysis.evidence.duration_seconds, 1)}с` : "",
+  ]);
+  logCheck("audio", analysis);
+  if (analysis.evidence.phrase_transcribed != null) {
+    logLine(`аудио: сервер распознал "${analysis.evidence.phrase_transcribed}"`);
+  }
   setStatus("аудио записано");
 }
 
@@ -916,7 +1005,9 @@ async function submitEvidence() {
   }
   const gesture = getStep("gesture");
   const audio = getStep("audio_phrase");
-  const observed = state.observedLuma.length ? state.observedLuma : state.expectedLuma;
+  // Never substitute the expected sequence for missing observations — an
+  // unran light step must score as "unknown", not as a perfect correlation.
+  const observed = state.observedLuma;
   const pulse = state.pulse || { bpm: null, signal_quality: null };
   const payload = {
     uid: state.session.uid,
@@ -940,7 +1031,7 @@ async function submitEvidence() {
         face_confidence: state.faceConfidence,
         bpm: state.skipped.has("rppg") ? null : pulse.bpm,
         signal_quality: state.skipped.has("rppg") ? null : pulse.signal_quality,
-        samples: getPulseValues(),
+        samples: getPulseValues().slice(-80),
         sample_rate_hz: 10,
         window_seconds: 4,
       },
@@ -980,9 +1071,10 @@ async function submitEvidence() {
 }
 
 function escapeHtml(value) {
-  const div = document.createElement("div");
-  div.textContent = String(value);
-  return div.innerHTML;
+  // Включая кавычки: строки попадают и внутрь HTML-атрибутов (title="...").
+  return String(value).replace(/[&<>"']/g, (ch) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]
+  ));
 }
 
 function renderChecksBreakdown(result) {
@@ -1089,14 +1181,25 @@ async function captureCameraPngBlob(maxWidth) {
   });
 }
 
+function videoBitrate(stream) {
+  const track = stream.getVideoTracks()[0];
+  if (!track) return undefined;
+  const settings = track.getSettings();
+  const pixels = (settings.width || 1280) * (settings.height || 720);
+  const fps = settings.frameRate || 30;
+  return Math.min(16_000_000, Math.max(2_500_000, Math.round(pixels * fps * 0.2)));
+}
+
 async function recordStreamBlob(stream, durationMs) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let recorder;
     try {
       // Default ~2.5 Mbps VP8 smears the high-frequency detail the forensic
-      // video classifier scores; ask for more (ignored on audio-only streams).
-      recorder = new MediaRecorder(stream, { videoBitsPerSecond: 6_000_000 });
+      // video classifier scores; scale with the actual capture resolution
+      // (~0.2 bit/px/frame) so 480p and 1080p cameras get the same detail
+      // density (ignored on audio-only streams).
+      recorder = new MediaRecorder(stream, { videoBitsPerSecond: videoBitrate(stream) });
     } catch (error) {
       reject(error);
       return;
