@@ -410,21 +410,11 @@ code {
   white-space: nowrap;
 }
 
-.console-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(290px, 0.85fr);
-}
-
 .console-main {
   padding: 26px;
-  border-right: 1px solid var(--line-soft);
   min-width: 0;
-}
-
-.console-side {
-  padding: 26px;
-  background: #fbfaf8;
-  min-width: 0;
+  max-width: 820px;
+  margin-inline: auto;
 }
 
 /* Stage */
@@ -652,45 +642,6 @@ video {
   color: var(--muted);
   font-size: 12.5px;
   line-height: 1.5;
-}
-
-/* ── Console sidebar ────────────────────────────────────────────────── */
-.side-title {
-  font-size: 12.5px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 12px;
-}
-
-.side-title + .metrics {
-  margin-top: 26px;
-}
-
-.metrics {
-  display: grid;
-}
-
-.metric {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--line-soft);
-  font-size: 13.5px;
-}
-
-.metric span {
-  color: var(--muted);
-  flex: none;
-}
-
-.metric b {
-  font-weight: 500;
-  text-align: right;
-  overflow-wrap: anywhere;
 }
 
 .field {
@@ -1120,15 +1071,6 @@ pre {
     margin-left: auto;
   }
 
-  .console-body {
-    grid-template-columns: 1fr;
-  }
-
-  .console-main {
-    border-right: 0;
-    border-bottom: 1px solid var(--line-soft);
-  }
-
   .steps li {
     border-right: 0;
     border-bottom: 1px solid var(--line);
@@ -1178,8 +1120,7 @@ pre {
   }
 
   .console-top,
-  .console-main,
-  .console-side {
+  .console-main {
     padding: 20px;
   }
 

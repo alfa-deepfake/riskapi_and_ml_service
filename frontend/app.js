@@ -92,13 +92,6 @@ const el = {
   currentStep: document.querySelector("#currentStep"),
   stageValue: document.querySelector("#stageValue"),
   stepHint: document.querySelector("#stepHint"),
-  faceMetric: document.querySelector("#faceMetric"),
-  lightMetric: document.querySelector("#lightMetric"),
-  pulseMetric: document.querySelector("#pulseMetric"),
-  gestureMetric: document.querySelector("#gestureMetric"),
-  audioMetric: document.querySelector("#audioMetric"),
-  classifierMetric: document.querySelector("#classifierMetric"),
-  phraseInput: document.querySelector("#phraseInput"),
   decision: document.querySelector("#decision"),
   riskLine: document.querySelector("#riskLine"),
   checksBreakdown: document.querySelector("#checksBreakdown"),
@@ -144,32 +137,6 @@ const CHECK_NAME_RU = {
 
 function checkNameRu(value) {
   return CHECK_NAME_RU[value] || value;
-}
-
-// Gesture action identifiers (expected/observed) from the server, mapped to
-// Russian for display; unknown values fall through unchanged.
-const GESTURE_ACTION_RU = {
-  touch_mouth: "коснитесь губ",
-  touch_nose: "коснитесь носа",
-  not_completed: "не выполнено",
-  none: "нет действия",
-};
-
-function gestureActionRu(value) {
-  return value == null ? value : GESTURE_ACTION_RU[value] || value;
-}
-
-// Video-classifier condition labels from the server, mapped to Russian.
-const CONDITION_RU = {
-  clean: "чисто",
-  degraded: "ухудшено",
-  restored: "восстановлено",
-  vidcall: "видеозвонок",
-  vidcall_ff: "видеозвонок (ff)",
-};
-
-function conditionRu(value) {
-  return CONDITION_RU[value] || value;
 }
 
 // Diagnostic "reason" sentences come from the server in English. They render in
@@ -299,11 +266,6 @@ function fmt(value, digits = 2) {
   return typeof value === "number" && Number.isFinite(value) ? value.toFixed(digits) : "—";
 }
 
-function metricText(status, parts) {
-  const extras = parts.filter(Boolean).join(" · ");
-  return extras ? `${status} · ${extras}` : status;
-}
-
 function logLine(text) {
   const stamp = new Date().toLocaleTimeString();
   el.scoreJson.textContent += `[${stamp}] ${text}\n`;
@@ -376,11 +338,6 @@ function resetEvidence() {
   state.faceConfidence = null;
   state.gestureAttempt = null;
   state.serviceEvidence = {};
-  el.lightMetric.textContent = "ожидание";
-  el.pulseMetric.textContent = "ожидание";
-  el.gestureMetric.textContent = "ожидание";
-  el.audioMetric.textContent = "ожидание";
-  el.classifierMetric.textContent = "ожидание";
   el.decision.className = "decision";
   el.decision.dataset.decision = "";
   el.decision.textContent = "не оценено";
@@ -403,8 +360,6 @@ el.startVerification.addEventListener("click", async () => {
         scenario: "frontend_sequential_challenge",
       }),
     });
-    el.phraseInput.value = "";
-    el.gestureMetric.textContent = gestureActionRu(getStep("gesture").payload.expected_action);
     setStatus("сессия готова");
     renderStep();
   } catch (error) {
@@ -491,24 +446,11 @@ function startFaceWatch() {
 function renderFaceState() {
   el.faceOval.classList.toggle("ok", state.facePresent === true);
   el.faceOval.classList.toggle("no-face", state.facePresent === false);
-  if (!state.stream) {
-    el.faceMetric.textContent = "—";
-    el.guideHint.textContent = "Совместите лицо с овалом";
-    return;
-  }
-  if (!("FaceDetector" in window)) {
-    el.faceMetric.textContent = "нет детектора в браузере";
-    el.guideHint.textContent = "Совместите лицо с овалом";
-    return;
-  }
-  if (state.facePresent === true) {
-    el.faceMetric.textContent = "обнаружено";
+  if (state.stream && state.facePresent === true) {
     el.guideHint.textContent = "Лицо обнаружено — сохраняйте положение";
-  } else if (state.facePresent === false) {
-    el.faceMetric.textContent = "не найдено";
+  } else if (state.stream && state.facePresent === false) {
     el.guideHint.textContent = "Лицо не найдено — переместитесь в овал";
   } else {
-    el.faceMetric.textContent = "—";
     el.guideHint.textContent = "Совместите лицо с овалом";
   }
 }
@@ -532,7 +474,6 @@ async function runLight() {
     });
     state.serviceEvidence.active_light = analysis.evidence;
     state.stepStatus.active_light = analysis.status;
-    el.lightMetric.textContent = metricText(statusRu(analysis.status), ["лицо не в кадре"]);
     logCheck("active_light", analysis);
     setStatus(`свет: ${statusRu(analysis.status)}`);
     return;
@@ -578,9 +519,6 @@ async function runLight() {
   });
   state.serviceEvidence.active_light = analysis.evidence;
   state.stepStatus.active_light = analysis.status;
-  el.lightMetric.textContent = metricText(statusRu(analysis.status), [
-    analysis.check ? `риск ${fmt(analysis.check.risk)}` : "",
-  ]);
   logCheck("active_light", analysis);
   setStatus("свет записан");
 }
@@ -633,10 +571,6 @@ async function runFaceFlashLight(pairs) {
   state.stepStatus.active_light = analysis.status;
   state.expectedLuma = pairs.map((pair) => pair.lighting.lighting_rgb?.[0] ?? 255);
   state.observedLuma = new Array(pairs.length).fill(0);
-  el.lightMetric.textContent = metricText(statusRu(analysis.status), [
-    analysis.evidence.verifier_score != null ? `оценка ${fmt(analysis.evidence.verifier_score)}` : "",
-    analysis.evidence.pair_count != null ? `${analysis.evidence.pair_count} пар` : "",
-  ]);
   logCheck("active_light", analysis);
   setStatus(`свет: ${statusRu(analysis.status)}`);
 }
@@ -675,9 +609,6 @@ async function confirmGesture() {
   state.gestureAttempt = analysis.evidence;
   state.gestureDone = analysis.status === "passed";
   state.stepStatus.gesture = analysis.status;
-  el.gestureMetric.textContent = metricText(statusRu(analysis.status), [
-    analysis.evidence.observed_action ? `распознано: ${gestureActionRu(analysis.evidence.observed_action)}` : "действие не распознано",
-  ]);
   logCheck("gesture", analysis);
   setStatus(`жест: ${statusRu(analysis.status)}`);
 }
@@ -699,10 +630,6 @@ async function samplePulse() {
       signal_quality: analysis.evidence.signal_quality ?? null,
     };
     state.stepStatus.rppg = analysis.status;
-    el.pulseMetric.textContent = metricText(statusRu(analysis.status), [
-      analysis.evidence.bpm != null ? `${Math.round(analysis.evidence.bpm)} уд/мин` : "нет сигнала пульса",
-      analysis.evidence.signal_quality != null ? `SQI ${fmt(analysis.evidence.signal_quality)}` : "",
-    ]);
     logCheck("rppg", analysis);
     setStatus(`пульс: ${statusRu(analysis.status)}`);
     return;
@@ -728,7 +655,6 @@ async function samplePulse() {
   });
   state.serviceEvidence.rppg = analysis.evidence;
   state.stepStatus.rppg = analysis.status;
-  el.pulseMetric.textContent = statusRu(analysis.status);
   logCheck("rppg", analysis);
   setStatus("пульс замерен");
 }
@@ -760,11 +686,6 @@ async function recordAudio() {
     const analysis = await requestForm("/v1/services/audio/analyze", form);
     state.serviceEvidence.audio = analysis.evidence;
     state.stepStatus.audio = analysis.status;
-    el.phraseInput.value = analysis.evidence.phrase_transcribed ?? "(нет транскрипта)";
-    el.audioMetric.textContent = metricText(statusRu(analysis.status), [
-      analysis.evidence.ai_probability != null ? `ИИ ${fmt(analysis.evidence.ai_probability)}` : "модель недоступна",
-      analysis.evidence.duration_seconds != null ? `${fmt(analysis.evidence.duration_seconds, 1)}с` : "",
-    ]);
     logCheck("audio", analysis);
     if (analysis.evidence.phrase_transcribed != null) {
       logLine(`аудио: сервер распознал "${analysis.evidence.phrase_transcribed}"`);
@@ -777,7 +698,6 @@ async function recordAudio() {
       detector: "browser_recording_failed",
     };
     state.stepStatus.audio = "unknown";
-    el.audioMetric.textContent = statusRu("unknown");
     logLine("аудио: запись в браузере не удалась");
   }
 
@@ -796,24 +716,8 @@ async function analyzeClassifier() {
   if (state.faceConfidence !== null) form.append("face_confidence", String(state.faceConfidence));
   const analysis = await requestForm("/v1/services/classifier/analyze-video", form);
   state.serviceEvidence.classifier = analysis.evidence;
-  el.classifierMetric.textContent = classifierSummary(analysis);
   logCheck("classifier", analysis);
   setStatus(`классификатор: ${statusRu(analysis.status)}`);
-}
-
-function classifierSummary(analysis) {
-  const evidence = analysis.evidence || {};
-  const parts = [];
-  if (evidence.fake_probability != null) parts.push(`p_подделки ${fmt(evidence.fake_probability)}`);
-  if (evidence.cnn_probability != null) parts.push(`cnn ${fmt(evidence.cnn_probability)}`);
-  if (evidence.model_scores && evidence.threshold != null) {
-    const scores = Object.values(evidence.model_scores);
-    const fakeVotes = scores.filter((score) => score >= evidence.threshold).length;
-    parts.push(`${fakeVotes}/${scores.length} деревьев за подделку`);
-  }
-  if (evidence.condition && evidence.condition !== "clean") parts.push(conditionRu(evidence.condition));
-  if (evidence.low_info) parts.push("мало деталей");
-  return metricText(statusRu(analysis.status), parts);
 }
 
 async function submitEvidence() {
@@ -826,7 +730,6 @@ async function submitEvidence() {
         face_present: state.facePresent,
         face_confidence: state.faceConfidence,
       };
-      el.classifierMetric.textContent = "недоступно";
     }
   }
   const gesture = getStep("gesture");
@@ -925,23 +828,19 @@ function applySkipEvidence(id) {
     state.expectedLuma = [...step.payload.luma_sequence];
     state.observedLuma = [...step.payload.luma_sequence];
     state.serviceEvidence.active_light = { skipped: true };
-    el.lightMetric.textContent = "пропущено";
   }
   if (id === "gesture") {
     state.gestureDone = false;
     state.gestureAttempt = { detector: "skipped", observed_action: null, confidence: 0 };
     state.serviceEvidence.gesture = { skipped: true };
-    el.gestureMetric.textContent = "пропущено";
   }
   if (id === "rppg") {
     state.pulse = { bpm: null, signal_quality: null };
     state.serviceEvidence.rppg = { skipped: true };
-    el.pulseMetric.textContent = "пропущено";
   }
   if (id === "audio") {
     state.audio = { duration_seconds: 0 };
     state.serviceEvidence.audio = { skipped: true };
-    el.audioMetric.textContent = "пропущено";
   }
 }
 
