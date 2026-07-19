@@ -28,9 +28,10 @@ class Settings(BaseSettings):
 
     # The phrase is useful to a voice-cloning pipeline from the moment it is
     # disclosed; the TTL keeps that window barely longer than honestly speaking
-    # it. Each retry burns an attempt and gets a fresh phrase.
+    # it. One attempt only: retries would hand a fraudster a fresh window per
+    # try to synthesize the phrase.
     audio_phrase_ttl_seconds: int = Field(default=15, alias="ML_AUDIO_PHRASE_TTL_SECONDS")
-    audio_max_attempts: int = Field(default=3, ge=1, alias="ML_AUDIO_MAX_ATTEMPTS")
+    audio_max_attempts: int = Field(default=1, ge=1, alias="ML_AUDIO_MAX_ATTEMPTS")
 
     audio_model_path: str = Field(default="models/audio/wavlm_all4_best.pt", alias="ML_AUDIO_MODEL_PATH")
     asr_model_path: str = Field(default="models/asr/faster-whisper-medium", alias="ML_ASR_MODEL_PATH")
