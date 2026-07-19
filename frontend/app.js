@@ -302,6 +302,10 @@ function renderStep() {
 
   el.primaryAction.disabled = false;
   el.skipStep.disabled = !TEST_SKIP_ENABLED || step.id === "score";
+  // The face oval is irrelevant while the user reads the audio phrase — hide it
+  // for that step only. It stays on for score, where the classifier clip is
+  // captured and still needs the face in frame.
+  el.faceGuide.classList.toggle("visible", Boolean(state.stream) && step.id !== "audio");
   el.currentStep.textContent = `Шаг ${state.stepIndex + 1}/${FLOW.length} — ${step.title}`;
   el.stageValue.textContent = displayValue(step);
   el.stepHint.textContent = displayHint(step);
