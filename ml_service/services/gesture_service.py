@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import sys
 import types
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import IntEnum
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -57,6 +57,8 @@ class GestureService:
 
 class PoseLandmark(IntEnum):
     NOSE = 0
+    LEFT_EYE = 2
+    RIGHT_EYE = 5
     MOUTH_LEFT = 9
     MOUTH_RIGHT = 10
 
@@ -68,18 +70,94 @@ class Point:
     visibility: float = 1.0
 
 
-# mediapipe hand-landmark ids for the five fingertips — the only points the
-# touch detector reads.
-FINGERTIP_IDS = (4, 8, 12, 16, 20)
+# Touch acceptance radius as a fraction of the outer inter-ocular distance, so
+# "touching" means the same physical distance whether the face is near or far
+# from the camera. The clamps keep a degenerate landmark scale from making the
+# check impossible (tiny face) or trivial (huge face); the default applies
+# until a face scale has been seen. 0.70 × a typical inter-ocular reading
+# reproduces the old fixed 0.075 at usual webcam framing.
+TOUCH_THRESHOLD_IOD = 0.70
+TOUCH_THRESHOLD_MIN = 0.05
+TOUCH_THRESHOLD_MAX = 0.14
+TOUCH_THRESHOLD_DEFAULT = 0.075
+# Net touching frames to confirm. Misses decay the score instead of resetting
+# it: a hand right in front of a face flickers in and out of detection, and a
+# single dropped frame mid-touch must not void the whole hold.
+TOUCH_CONFIRM_SCORE = 4.0
+TOUCH_MISS_DECAY = 1.0
+# A real touch usually occludes the very landmarks that define the target —
+# covering the nose with a palm makes the face mesh vanish at the moment of
+# contact. Keep the last real target alive this many frames (~1.5s at 30fps)
+# so the covering hand is measured against where the face just was.
+TARGET_MEMORY_FRAMES = 45
+
+
+@dataclass
+class TouchTracker:
+    """Per-frame touch decision state, independent of mediapipe/cv2.
+
+    Feed it one update per processed frame: the target point actually detected
+    on that frame (or None), every candidate hand landmark, and the current
+    inter-ocular distance when known. Any hand landmark counts as a touch
+    point — a fingertip of any finger, a knuckle, or the palm all qualify.
+    """
+
+    score: float = 0.0
+    confirmed: bool = False
+    target_frames: int = 0
+    best_distance: float | None = None
+    best_ratio: float | None = None
+    _target: Point | None = field(default=None, repr=False)
+    _target_age: int = field(default=0, repr=False)
+    _iod: float | None = field(default=None, repr=False)
+
+    def update(self, target: Point | None, hand_points: list[Point], iod: float | None) -> None:
+        if iod is not None and iod > 1e-6:
+            self._iod = iod
+        if target is not None:
+            self._target = target
+            self._target_age = 0
+            self.target_frames += 1
+        elif self._target is not None:
+            self._target_age += 1
+            if self._target_age > TARGET_MEMORY_FRAMES:
+                self._target = None
+        if self._target is None or not hand_points:
+            self.score = max(0.0, self.score - TOUCH_MISS_DECAY)
+            return
+
+        threshold = self.threshold
+        distance = min(math.hypot(p.x - self._target.x, p.y - self._target.y) for p in hand_points)
+        if self.best_distance is None or distance < self.best_distance:
+            self.best_distance = distance
+        ratio = distance / threshold
+        if self.best_ratio is None or ratio < self.best_ratio:
+            self.best_ratio = ratio
+        if distance <= threshold:
+            self.score += 1.0
+            if self.score >= TOUCH_CONFIRM_SCORE:
+                self.confirmed = True
+        else:
+            self.score = max(0.0, self.score - TOUCH_MISS_DECAY)
+
+    @property
+    def threshold(self) -> float:
+        if self._iod is None:
+            return TOUCH_THRESHOLD_DEFAULT
+        return min(TOUCH_THRESHOLD_MAX, max(TOUCH_THRESHOLD_MIN, TOUCH_THRESHOLD_IOD * self._iod))
+
+    @property
+    def confidence(self) -> float:
+        if self.best_ratio is None:
+            return 0.0
+        return max(0.0, min(1.0, 1.0 - self.best_ratio / 2.0))
 
 
 def _run_touch_detector(
     video_path: Path,
     expected_action: str,
     *,
-    threshold: float = 0.075,
-    hold_frames: int = 4,
-    max_frames: int = 180,
+    max_frames: int = 240,
 ) -> dict:
     try:
         import cv2
@@ -95,25 +173,28 @@ def _run_touch_detector(
     if not cap.isOpened():
         raise RuntimeError("could not open gesture video")
 
-    # max_frames is calibrated for ~30fps (6s of clip). A 60fps camera would
-    # otherwise hit the cap at 3s and lose late touches — subsample instead so
+    # max_frames is calibrated for ~30fps (8s of clip). A 60fps camera would
+    # otherwise hit the cap at 4s and lose late touches — subsample instead so
     # the cap always covers the same wall-clock span.
     fps = cap.get(cv2.CAP_PROP_FPS) or 0.0
     stride = max(1, round(fps / 30.0)) if fps > 0 else 1
 
-    face_frames = 0
-    best_distance: float | None = None
-    touch_streak = 0
-    confirmed = False
+    tracker = TouchTracker()
     frame_count = 0
     mp_hands = mp.solutions.hands
     mp_pose = mp.solutions.pose
     mp_face_mesh = mp.solutions.face_mesh
     try:
         with (
-            mp_hands.Hands(max_num_hands=2, model_complexity=1, min_detection_confidence=0.55, min_tracking_confidence=0.55) as hands,
-            mp_pose.Pose(model_complexity=1, min_detection_confidence=0.55, min_tracking_confidence=0.55) as pose,
-            mp_face_mesh.FaceMesh(max_num_faces=1, refine_landmarks=True, min_detection_confidence=0.55, min_tracking_confidence=0.55) as face_mesh,
+            # static_image_mode: full detection on every frame instead of
+            # detect-then-track. Tracking loses the hand exactly when it moves
+            # fast toward the face, and coasts on a stale ROI afterwards; the
+            # per-frame detector never does. Detection floors are deliberately
+            # low (dim rooms) — the leaky touch accumulator and the face-frame
+            # ratio guard absorb the extra flicker a loose detector produces.
+            mp_hands.Hands(static_image_mode=True, max_num_hands=2, model_complexity=1, min_detection_confidence=0.35) as hands,
+            mp_pose.Pose(static_image_mode=True, model_complexity=2, min_detection_confidence=0.40) as pose,
+            mp_face_mesh.FaceMesh(static_image_mode=True, max_num_faces=1, refine_landmarks=True, min_detection_confidence=0.40) as face_mesh,
         ):
             read_index = 0
             while frame_count < max_frames:
@@ -124,46 +205,49 @@ def _run_touch_detector(
                 if (read_index - 1) % stride != 0:
                     continue
                 frame_count += 1
-                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                rgb = _enhance_if_dark(cv2, cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
                 rgb.flags.writeable = False
-                hand_results = hands.process(rgb)
-                pose_results = pose.process(rgb)
                 face_results = face_mesh.process(rgb)
-                rgb.flags.writeable = True
-
-                target_point = target(pose_results, face_results)
-                if target_point is not None:
-                    face_frames += 1
-                fingertips = _iter_fingertips(hand_results)
-                if target_point is None or not fingertips:
-                    touch_streak = 0
-                    continue
-
-                closest_distance = min(_normalized_distance(tip, target_point) for tip in fingertips)
-                best_distance = closest_distance if best_distance is None else min(best_distance, closest_distance)
-                touching = closest_distance <= threshold
-                touch_streak = touch_streak + 1 if touching else 0
-                if touch_streak >= hold_frames:
-                    confirmed = True
+                target_point = target.from_face(face_results)
+                if target_point is None:
+                    # Pose is the expensive fallback — consulted only on frames
+                    # where the face mesh has no target (occlusion, bad light,
+                    # face partly out of frame).
+                    target_point = target.from_pose(pose.process(rgb))
+                hand_points = _iter_hand_points(hands.process(rgb))
+                tracker.update(target_point, hand_points, _interocular_distance(face_results))
+                if tracker.confirmed:
                     break
     finally:
         cap.release()
 
-    # A sustained touch streak already requires face/pose landmarks on every
-    # streak frame, so a *confirmed* gesture IS presence — a wall cannot sustain a
-    # hold_frames-long touch on the target landmark. The early break truncates
-    # frame_count, so applying the ratio floor to a confirmed gesture wrongly
-    # rejected fast, genuine gestures. The ratio guard is only meaningful on the
-    # non-confirmed path, which always runs the full clip (no early break).
-    face_present = _gesture_face_present(confirmed, face_frames, frame_count)
-    confidence = 0.0 if best_distance is None else max(0.0, min(1.0, 1.0 - best_distance / max(threshold * 2.0, 1e-6)))
+    # A confirmed touch already required real target detections within the
+    # memory window, so it is presence on its own; the early break truncates
+    # frame_count, which would otherwise starve the ratio guard. The ratio
+    # guard only applies to the non-confirmed path, which runs the full clip.
+    face_present = _gesture_face_present(tracker.confirmed, tracker.target_frames, frame_count)
     return {
-        "observed_action": expected_action if confirmed else "not_completed",
-        "confidence": confidence,
+        "observed_action": expected_action if tracker.confirmed else "not_completed",
+        "confidence": tracker.confidence,
         "face_present": face_present,
         "frame_count": frame_count,
-        "best_distance": best_distance,
+        "best_distance": tracker.best_distance,
     }
+
+
+# Mediapipe detectors go blind well before a scene is truly dark. CLAHE on the
+# luma plane restores local contrast in dim rooms; brighter clips pass through
+# untouched so normal captures keep their native statistics.
+DARK_FRAME_MEAN_LUMA = 70.0
+
+
+def _enhance_if_dark(cv2, rgb):
+    ycrcb = cv2.cvtColor(rgb, cv2.COLOR_RGB2YCrCb)
+    luma = ycrcb[:, :, 0]
+    if float(luma.mean()) >= DARK_FRAME_MEAN_LUMA:
+        return rgb
+    ycrcb[:, :, 0] = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8)).apply(luma)
+    return cv2.cvtColor(ycrcb, cv2.COLOR_YCrCb2RGB)
 
 
 # ponytail: face must persist across the clip, not flicker on one frame. A single
@@ -180,9 +264,9 @@ def _face_reliably_present(face_frames: int, processed_frames: int) -> bool:
 
 
 def _gesture_face_present(confirmed: bool, face_frames: int, processed_frames: int) -> bool:
-    # A confirmed touch streak requires tracked face/pose landmarks on every
-    # streak frame, so it is presence on its own. Otherwise fall back to the
-    # ratio guard over the (fully processed) clip.
+    # A confirmed touch requires real face/pose target detections at most
+    # TARGET_MEMORY_FRAMES before the hold, so it is presence on its own.
+    # Otherwise fall back to the ratio guard over the (fully processed) clip.
     return confirmed or _face_reliably_present(face_frames, processed_frames)
 
 
@@ -226,39 +310,55 @@ def _midpoint(left: Point | None, right: Point | None) -> Point | None:
     return Point((left.x + right.x) / 2.0, (left.y + right.y) / 2.0, min(left.visibility, right.visibility))
 
 
-def _face_target(*landmark_ids: int) -> Callable[[object, object], Point | None]:
-    return lambda _pose_results, face_results: _face_point(face_results, landmark_ids)
+# Outer eye corners: 33 is on the subject's right eye, 263 on the left.
+_IOD_LANDMARKS = (33, 263)
 
 
-def _mouth_target(pose_results: object, face_results: object) -> Point | None:
-    return _face_point(face_results, (13, 14, 78, 308)) or _midpoint(
-        _pose_point(pose_results, PoseLandmark.MOUTH_LEFT),
-        _pose_point(pose_results, PoseLandmark.MOUTH_RIGHT),
-    )
+def _interocular_distance(face_results: object) -> float | None:
+    if not face_results or not face_results.multi_face_landmarks:
+        return None
+    landmarks = face_results.multi_face_landmarks[0].landmark
+    right, left = (landmarks[index] for index in _IOD_LANDMARKS)
+    return math.hypot(left.x - right.x, left.y - right.y)
 
 
-def _nose_target(pose_results: object, face_results: object) -> Point | None:
-    return _face_point(face_results, (1, 4, 5)) or _pose_point(pose_results, PoseLandmark.NOSE)
+@dataclass(frozen=True)
+class TargetSpec:
+    face_ids: tuple[int, ...]
+    pose_fallback: Callable[[object], Point | None] | None = None
+
+    def from_face(self, face_results: object) -> Point | None:
+        return _face_point(face_results, self.face_ids)
+
+    def from_pose(self, pose_results: object) -> Point | None:
+        return self.pose_fallback(pose_results) if self.pose_fallback else None
 
 
-TARGETS: dict[str, Callable[[object, object], Point | None]] = {
-    "nose": _nose_target,
-    "mouth": _mouth_target,
-    "left_eye": _face_target(33, 133),
-    "right_eye": _face_target(362, 263),
+# Face-mesh landmark ids are anatomical (the uploaded stream is not mirrored):
+# 362/263 is the subject's LEFT eye, 33/133 the RIGHT. Each target carries a
+# pose-model fallback for frames where the face mesh finds nothing.
+TARGETS: dict[str, TargetSpec] = {
+    "nose": TargetSpec((1, 4, 5), lambda pose_results: _pose_point(pose_results, PoseLandmark.NOSE)),
+    "mouth": TargetSpec(
+        (13, 14, 78, 308),
+        lambda pose_results: _midpoint(
+            _pose_point(pose_results, PoseLandmark.MOUTH_LEFT),
+            _pose_point(pose_results, PoseLandmark.MOUTH_RIGHT),
+        ),
+    ),
+    "left_eye": TargetSpec((362, 263), lambda pose_results: _pose_point(pose_results, PoseLandmark.LEFT_EYE)),
+    "right_eye": TargetSpec((33, 133), lambda pose_results: _pose_point(pose_results, PoseLandmark.RIGHT_EYE)),
 }
 
 
-def _iter_fingertips(hand_results: object) -> list[Point]:
+def _iter_hand_points(hand_results: object) -> list[Point]:
+    # Every hand landmark is a candidate touch point: people point with any
+    # finger, with a knuckle, or cover the target with the whole palm — the
+    # palm-side landmarks are the ones that land on the face in that case.
     if not hand_results or not hand_results.multi_hand_landmarks:
         return []
-    tips: list[Point] = []
-    for hand_landmarks in hand_results.multi_hand_landmarks:
-        for tip_id in FINGERTIP_IDS:
-            landmark = hand_landmarks.landmark[tip_id]
-            tips.append(Point(landmark.x, landmark.y))
-    return tips
-
-
-def _normalized_distance(a: Point, b: Point) -> float:
-    return math.hypot(a.x - b.x, a.y - b.y)
+    return [
+        Point(landmark.x, landmark.y)
+        for hand_landmarks in hand_results.multi_hand_landmarks
+        for landmark in hand_landmarks.landmark
+    ]
