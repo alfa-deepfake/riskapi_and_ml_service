@@ -775,7 +775,9 @@ async function confirmGesture() {
 async function samplePulse() {
   setStatus("запись видео rPPG");
   try {
-    const blob = await recordWithCountdown(9000, "ПУЛЬС");
+    // 18s instead of the original 9: rPPG needs a long stable face window,
+    // and short clips were the main source of low-SQI "unknown" verdicts.
+    const blob = await recordWithCountdown(18000, "ПУЛЬС");
     const form = new FormData();
     form.append("file", blob, "rppg.webm");
     if (state.facePresent !== null) form.append("face_present", String(state.facePresent));
@@ -1031,6 +1033,9 @@ async function submitEvidence() {
     body: JSON.stringify(payload),
   });
   state.scored = true;
+  // The check is over — release the camera right away instead of waiting
+  // for a manual reset.
+  stopCamera();
   el.decision.className = `decision ${result.decision}`;
   el.decision.dataset.decision = result.decision;
   el.decision.textContent = statusRu(result.decision);
