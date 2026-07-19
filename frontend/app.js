@@ -93,6 +93,7 @@ const el = {
   skipStep: document.querySelector("#skipStep"),
   resetFlow: document.querySelector("#resetFlow"),
   stage: document.querySelector("#challengeStage"),
+  stageOverlay: document.querySelector(".stage-overlay"),
   flashFullscreen: document.querySelector("#flashFullscreen"),
   camera: document.querySelector("#camera"),
   faceGuide: document.querySelector("#faceGuide"),
@@ -267,9 +268,23 @@ function renderProgress() {
   }
 }
 
+// Re-trigger the overlay's slide-in only when the visible step actually
+// changes, so mid-step re-renders don't flicker.
+let lastStepKey = null;
+
+function animateStepSwap() {
+  const key = state.session ? `step-${state.stepIndex}` : "idle";
+  if (key === lastStepKey) return;
+  lastStepKey = key;
+  el.stageOverlay.classList.remove("swap");
+  void el.stageOverlay.offsetWidth;
+  el.stageOverlay.classList.add("swap");
+}
+
 function renderStep() {
   const step = currentFlowStep();
   renderProgress();
+  animateStepSwap();
   if (!state.session) {
     el.primaryAction.disabled = false;
     setPrimaryAction("Начать проверку", { start: true });
@@ -405,6 +420,7 @@ function stopCamera() {
     state.stream = null;
   }
   el.camera.srcObject = null;
+  el.camera.classList.remove("live");
   el.faceGuide.classList.remove("visible");
   state.facePresent = null;
   state.faceConfidence = null;
@@ -533,6 +549,7 @@ async function startCamera() {
   });
   el.camera.srcObject = state.stream;
   await waitForVideo();
+  el.camera.classList.add("live");
   el.faceGuide.classList.add("visible");
   await updateFacePresence();
   renderFaceState();
