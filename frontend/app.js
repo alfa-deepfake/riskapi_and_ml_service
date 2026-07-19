@@ -6,6 +6,10 @@ const LIGHT_SETTLE_MS = Number(appConfig.lightSettleMs || 180);
 // gives camera auto-exposure time to react to each change.
 const FLASH_PHASE_MS = Number(appConfig.flashPhaseMs || 250);
 const FLASH_FRAME_WAIT_MAX_MS = Number(appConfig.flashFrameWaitMaxMs || 400);
+// Cap for waiting on a real screen repaint after a flash color change. rAF
+// pauses on a backgrounded tab, so this timer keeps the loop from hanging
+// there; in the foreground the double-rAF resolves first (~1 frame).
+const FLASH_PRESENT_WAIT_MS = Number(appConfig.flashPresentWaitMs || 300);
 // Audio: mic level preflight runs before the phrase is disclosed.
 const MIC_PREFLIGHT_MS = Number(appConfig.micPreflightMs || 2000);
 const MIC_PREFLIGHT_TRIES = 3;
@@ -625,6 +629,7 @@ async function runLight() {
       el.flashFullscreen.style.backgroundColor = color;
       el.stage.style.backgroundColor = color;
       el.stageValue.textContent = value > 127 ? "БЕЛЫЙ" : "ЧЁРНЫЙ";
+      await nextPresentedFrame();
       await sleep(LIGHT_SETTLE_MS);
       // Neutral fallback: if the camera frame is unavailable the sample must NOT
       // default to the expected value, or the check passes without a camera.
@@ -728,7 +733,27 @@ async function captureAndAnalyzeFlashPairs(pairs) {
 // The frame wait is capped: dark phases push webcams into long exposure at a
 // few fps (and fullscreen can starve rVFC), which would stretch every phase
 // and the whole challenge with it.
+// Wait until the browser has actually presented the flash color on screen.
+// Mobile Chrome coalesces repaints of the fixed overlay when the loop is
+// driven only by timers, so the color change can sit unpainted until a scroll
+// forces a compositor frame. A double rAF = one frame to apply the change, one
+// to confirm it painted; the timer bounds the wait if rAF is paused (tab
+// backgrounded).
+function nextPresentedFrame() {
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    requestAnimationFrame(() => requestAnimationFrame(done));
+    window.setTimeout(done, FLASH_PRESENT_WAIT_MS);
+  });
+}
+
 async function settleFlashPhase() {
+  await nextPresentedFrame();
   await sleep(FLASH_PHASE_MS);
   await Promise.race([nextCameraFrames(2), sleep(FLASH_FRAME_WAIT_MAX_MS)]);
 }
