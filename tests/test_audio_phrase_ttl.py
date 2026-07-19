@@ -81,11 +81,12 @@ async def test_fresh_phrase_flow_and_single_submission(monkeypatch):
         assert len(body["phrase"].split()) == 3
         assert body["attempts_left"] == settings.audio_max_attempts - 1
 
-        # The session challenge rotates to the issued phrase (final scoring
-        # verifies against it).
+        # The rotated phrase never rides in the challenge payload — the client
+        # gets it from the issue response (the prompt mirrors it for UI only).
         challenge = (await client.get(f"/v1/sessions/{session_id}/challenge")).json()
         step = next(s for s in challenge["challenge"]["steps"] if s["type"] == "audio_phrase")
-        assert step["payload"]["phrase"] == body["phrase"]
+        assert "phrase" not in step["payload"]
+        assert step["prompt"] == body["phrase"]
 
         transcript["value"] = body["phrase"]
         analyzed = await client.post(
@@ -134,6 +135,44 @@ async def test_expired_phrase_is_rejected(monkeypatch):
         body = analyzed.json()
         assert body["message"] == "phrase_expired"
         assert body["status"] == "unknown"
+
+
+@pytest.mark.anyio
+async def test_forged_evidence_without_issuing_a_phrase_fails_the_phrase(monkeypatch):
+    # The client skips /audio/phrase and submits self-scored audio evidence.
+    # The session phrase is never disclosed (stripped from responses), so the
+    # forged transcript is checked against a phrase the client cannot know.
+    # ponytail: secrecy-only defense — the 18-word vocabulary is public, so a
+    # guess passes ~5% of tries; the unconditional server-held override is the
+    # upgrade path if that ever matters.
+    from ml_service.core import challenge as challenge_module
+
+    monkeypatch.setattr(challenge_module, "generate_audio_phrase", lambda rng=None: "телефон пирамида горизонт")
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        session = await _create_session(client)
+        audio_step = next(s for s in session["challenge"]["steps"] if s["type"] == "audio_phrase")
+        assert "phrase" not in audio_step["payload"]
+        assert audio_step["prompt"] == AUDIO_PROMPT_PLACEHOLDER
+
+        scored = await client.post(
+            f"/v1/sessions/{session['session_id']}/evidence",
+            json={
+                "uid": "u-ttl",
+                "check_id": "c-ttl",
+                "evidence": {
+                    "audio": {
+                        "phrase_expected": "апельсин крокодил лестница",
+                        "phrase_transcribed": "апельсин крокодил лестница",
+                        "ai_probability": 0.02,
+                        "speaker_match_probability": 1.0,
+                    }
+                },
+            },
+        )
+        audio_check = next(c for c in scored.json()["checks"] if c["name"] == "audio")
+        assert audio_check["status"] == "failed"
+        assert scored.json()["decision"] != "allow"
 
 
 @pytest.mark.anyio

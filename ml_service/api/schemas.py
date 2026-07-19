@@ -38,7 +38,12 @@ class SessionResponse(BaseModel):
 
     @classmethod
     def from_session(cls, session: SessionRecord) -> "SessionResponse":
-        return cls(**session.model_dump())
+        data = session.model_dump()
+        # The audio phrase is disclosed only by the TTL'd issue endpoint;
+        # session/challenge responses must never carry it.
+        for step in data["challenge"]["steps"]:
+            step["payload"].pop("phrase", None)
+        return cls(**data)
 
 
 class AudioPhraseResponse(BaseModel):

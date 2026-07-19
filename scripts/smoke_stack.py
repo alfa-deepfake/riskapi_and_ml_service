@@ -32,6 +32,14 @@ def main() -> int:
     light = next(step for step in steps if step["type"] == "active_light")
     gesture = next(step for step in steps if step["type"] == "gesture")
     audio = next(step for step in steps if step["type"] == "audio_phrase")
+    assert "phrase" not in audio["payload"], "audio phrase must not leak into the session response"
+
+    # The audio check only counts through the server-held path (issue a phrase,
+    # upload a real recording). A smoke run has no real speech, so it exercises
+    # the issue endpoint and expects the final decision to land in "review"
+    # (audio unscored blocks "allow").
+    issued = post_json(f"/v1/sessions/{session['session_id']}/audio/phrase", {})
+    assert len(issued["phrase"].split()) == 3, issued
 
     score = post_json(
         f"/v1/sessions/{session['session_id']}/evidence",
@@ -67,18 +75,11 @@ def main() -> int:
                     "detector": "compose-smoke-detector",
                     "face_present": True,
                 },
-                "audio": {
-                    "phrase_expected": audio["payload"]["phrase"],
-                    "phrase_transcribed": audio["payload"]["phrase"],
-                    "ai_probability": 0.08,
-                    "speaker_match_probability": 0.86,
-                    "duration_seconds": 3.0,
-                },
             },
         },
     )
     print(json.dumps({"uid": uid, "check_id": check_id, "decision": score["decision"], "risk_score": score["risk_score"]}, indent=2))
-    return 0 if score["decision"] == "allow" else 1
+    return 0 if score["decision"] == "review" else 1
 
 
 if __name__ == "__main__":

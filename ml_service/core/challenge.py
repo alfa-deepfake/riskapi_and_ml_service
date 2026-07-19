@@ -98,8 +98,9 @@ def generate_challenge(seed: int | None = None) -> ChallengePlan:
             ChallengeStep(
                 step_id=str(uuid.uuid4()),
                 type="audio_phrase",
-                # payload.phrase stays for legacy clients that never request a
-                # fresh phrase; new clients see the placeholder until they do.
+                # payload.phrase is server-side only (final scoring verifies
+                # against it); SessionResponse strips it, so clients see the
+                # phrase only via the TTL'd issue endpoint.
                 prompt=AUDIO_PROMPT_PLACEHOLDER,
                 payload={"phrase": phrase},
                 duration_ms=6000,

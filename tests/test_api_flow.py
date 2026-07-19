@@ -2,10 +2,11 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from ml_service.main import app
+from ml_service.services import audio_service
 
 
 @pytest.mark.anyio
-async def test_session_challenge_and_evidence_flow():
+async def test_session_challenge_and_evidence_flow(monkeypatch):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         created = await client.post(
@@ -21,7 +22,24 @@ async def test_session_challenge_and_evidence_flow():
 
         light = next(step for step in session["challenge"]["steps"] if step["type"] == "active_light")
         gesture = next(step for step in session["challenge"]["steps"] if step["type"] == "gesture")
-        audio = next(step for step in session["challenge"]["steps"] if step["type"] == "audio_phrase")
+
+        # Audio goes through the server-held path: issue a phrase, upload a
+        # recording (models mocked), and let final scoring pick up the result.
+        issued = await client.post(f"/v1/sessions/{session['session_id']}/audio/phrase")
+        assert issued.status_code == 200
+        phrase = issued.json()["phrase"]
+        monkeypatch.setattr(
+            audio_service,
+            "_run_audio_model",
+            lambda _path: ({"ai_probability": 0.08, "detector": "audio-wavlm-all4"}, ""),
+        )
+        monkeypatch.setattr(audio_service, "_run_asr", lambda _path: phrase)
+        monkeypatch.setattr(audio_service, "_probe_duration", lambda _path: 3.0)
+        analyzed = await client.post(
+            f"/v1/sessions/{session['session_id']}/audio/analyze",
+            files={"file": ("speech.webm", b"not-audio", "audio/webm")},
+        )
+        assert analyzed.json()["status"] == "passed"
 
         scored = await client.post(
             f"/v1/sessions/{session['session_id']}/evidence",
@@ -48,12 +66,6 @@ async def test_session_challenge_and_evidence_flow():
                         "detector": "api-test-detector",
                         "face_present": True,
                     },
-                    "audio": {
-                        "phrase_expected": audio["payload"]["phrase"],
-                        "phrase_transcribed": audio["payload"]["phrase"],
-                        "ai_probability": 0.08,
-                        "speaker_match_probability": 0.88,
-                    },
                 },
             },
         )
@@ -67,6 +79,8 @@ async def test_session_challenge_and_evidence_flow():
             "gesture",
             "audio",
         }
+        audio_check = next(check for check in score["checks"] if check["name"] == "audio")
+        assert audio_check["status"] == "passed"
 
         # The challenge is one-time: a scored session cannot be replayed.
         replay = await client.post(
