@@ -88,7 +88,7 @@ const el = {
   uid: document.querySelector("#uid"),
   checkId: document.querySelector("#checkId"),
   status: document.querySelector("#status"),
-  startVerification: document.querySelector("#startVerification"),
+  progressDots: document.querySelector("#progressDots"),
   primaryAction: document.querySelector("#primaryAction"),
   skipStep: document.querySelector("#skipStep"),
   resetFlow: document.querySelector("#resetFlow"),
@@ -250,10 +250,29 @@ async function requestForm(path, form) {
   return fetchChecked(path, { method: "POST", body: form });
 }
 
+// The single CTA under the stage: red "start" before a session (and for a
+// rerun after scoring — the server session is consumed, a new one is needed),
+// dark per-step action while a flow is running.
+function setPrimaryAction(label, { start = false } = {}) {
+  el.primaryAction.textContent = label;
+  el.primaryAction.classList.toggle("btn-primary", start);
+  el.primaryAction.classList.toggle("btn-dark", !start);
+}
+
+function renderProgress() {
+  const dots = el.progressDots.children;
+  for (let index = 0; index < dots.length; index += 1) {
+    const done = state.session && (index < state.stepIndex || (state.scored && index === state.stepIndex));
+    dots[index].className = done ? "done" : state.session && index === state.stepIndex ? "active" : "";
+  }
+}
+
 function renderStep() {
   const step = currentFlowStep();
+  renderProgress();
   if (!state.session) {
-    el.primaryAction.disabled = true;
+    el.primaryAction.disabled = false;
+    setPrimaryAction("Начать проверку", { start: true });
     el.skipStep.disabled = true;
     el.currentStep.textContent = "Проверка не запущена";
     el.stageValue.textContent = "Готовы?";
@@ -261,14 +280,16 @@ function renderStep() {
     return;
   }
 
-  // The challenge is one-time on the server: after a successful score the
-  // session is consumed, so resubmitting would just 404.
-  el.primaryAction.disabled = step.id === "score" && state.scored;
+  el.primaryAction.disabled = false;
   el.skipStep.disabled = !TEST_SKIP_ENABLED || step.id === "score";
   el.currentStep.textContent = `Шаг ${state.stepIndex + 1}/${FLOW.length} — ${step.title}`;
   el.stageValue.textContent = displayValue(step);
   el.stepHint.textContent = displayHint(step);
-  el.primaryAction.textContent = step.action;
+  if (step.id === "score" && state.scored) {
+    setPrimaryAction("Пройти ещё раз", { start: true });
+  } else {
+    setPrimaryAction(step.action);
+  }
 }
 
 function fmt(value, digits = 2) {
@@ -303,11 +324,47 @@ function startCountdown(totalMs, label) {
 
 async function recordWithCountdown(durationMs, label) {
   const stop = startCountdown(durationMs, label);
+  el.stage.classList.add("recording");
   try {
     return await recordVideoBlob(durationMs);
   } finally {
     stop();
+    el.stage.classList.remove("recording");
   }
+}
+
+// Short "get ready" pause before a step suddenly demands something of the
+// user (full-screen flashing, a one-shot phrase).
+async function prepPause(label, hint, ms) {
+  el.stepHint.textContent = hint;
+  const stop = startCountdown(ms, label);
+  try {
+    await sleep(ms);
+  } finally {
+    stop();
+  }
+}
+
+// Spinner next to the stage headline while the server chews on an upload.
+async function analyze(request) {
+  el.stage.classList.add("analyzing");
+  try {
+    return await request;
+  } finally {
+    el.stage.classList.remove("analyzing");
+  }
+}
+
+// Count-up in the stage header for waits with no known duration (the first
+// rPPG call can sit out a ~1 min model warmup). Returns a stop function.
+function startElapsed(label) {
+  const startedAt = performance.now();
+  const render = () => {
+    el.stageValue.textContent = `${label} ${Math.round((performance.now() - startedAt) / 1000)}с`;
+  };
+  render();
+  const timer = window.setInterval(render, 1000);
+  return () => window.clearInterval(timer);
 }
 
 function displayValue(step) {
@@ -379,10 +436,22 @@ function resetEvidence() {
   renderFaceState();
 }
 
-el.startVerification.addEventListener("click", async () => {
+// Errors surface in the stage overlay instead of a browser alert: the flow
+// stays on the failed step, so the same button doubles as the retry.
+function showInlineError(error) {
+  const message = error?.message || String(error);
+  el.stageValue.textContent = "ОШИБКА";
+  el.stepHint.textContent = `${message} — нажмите кнопку ещё раз, чтобы повторить.`;
+  logLine(`ошибка: ${message}`);
+}
+
+async function startSession() {
+  let failure = null;
   try {
-    el.startVerification.disabled = true;
+    el.primaryAction.disabled = true;
+    el.resetFlow.disabled = true;
     resetEvidence();
+    state.session = null;
     setStatus("создание сессии");
     state.session = await requestJson("/v1/sessions", {
       method: "POST",
@@ -393,23 +462,26 @@ el.startVerification.addEventListener("click", async () => {
       }),
     });
     setStatus("сессия готова");
-    renderStep();
   } catch (error) {
+    failure = error;
     setStatus("ошибка сессии");
-    alert(error.message);
   } finally {
-    el.startVerification.disabled = false;
+    el.resetFlow.disabled = false;
+    renderStep();
+    if (failure) showInlineError(failure);
   }
-});
+}
 
 el.primaryAction.addEventListener("click", async () => {
-  if (!state.session) return;
+  if (!state.session || (currentFlowStep().id === "score" && state.scored)) {
+    return startSession();
+  }
   const step = currentFlowStep();
+  let failure = null;
   try {
-    // A restart or reset mid-step would mix the in-flight step's evidence
-    // into a fresh session — lock the flow controls until the step settles.
+    // A reset mid-step would mix the in-flight step's evidence into a fresh
+    // session — lock the flow controls until the step settles.
     el.primaryAction.disabled = true;
-    el.startVerification.disabled = true;
     el.resetFlow.disabled = true;
     el.skipStep.disabled = true;
     await runStep(step.id);
@@ -417,12 +489,12 @@ el.primaryAction.addEventListener("click", async () => {
       advance();
     }
   } catch (error) {
+    failure = error;
     setStatus(`ошибка: ${step.id}`);
-    alert(error.message);
   } finally {
-    el.startVerification.disabled = false;
     el.resetFlow.disabled = false;
     renderStep();
+    if (failure) showInlineError(failure);
   }
 });
 
@@ -519,6 +591,7 @@ async function runLight() {
     setStatus(`свет: ${statusRu(analysis.status)}`);
     return;
   }
+  await prepPause("ВСПЫШКИ ЧЕРЕЗ", "Сейчас экран будет мигать цветными вспышками. Держите лицо в овале.", 2500);
   if (Array.isArray(step.payload.face_flash_pairs) && step.payload.face_flash_pairs.length) {
     return runFaceFlashLight(step.payload.face_flash_pairs);
   }
@@ -630,7 +703,8 @@ async function captureAndAnalyzeFlashPairs(pairs) {
   }
 
   form.append("manifest", JSON.stringify({ pairs: manifestPairs }));
-  return requestForm("/v1/services/active-light/analyze-frame-pairs", form);
+  el.stageValue.textContent = "анализ…";
+  return analyze(requestForm("/v1/services/active-light/analyze-frame-pairs", form));
 }
 
 // The camera pipeline lags the screen by several frames, so a capture right
@@ -689,7 +763,7 @@ async function confirmGesture() {
   if (state.facePresent !== null) form.append("face_present", String(state.facePresent));
   el.stageValue.textContent = "анализ…";
   setStatus("жест: анализ");
-  const analysis = await requestForm("/v1/services/gesture/analyze-video", form);
+  const analysis = await analyze(requestForm("/v1/services/gesture/analyze-video", form));
   state.serviceEvidence.gesture = analysis.evidence;
   state.gestureAttempt = analysis.evidence;
   state.gestureDone = analysis.status === "passed";
@@ -706,9 +780,14 @@ async function samplePulse() {
     form.append("file", blob, "rppg.webm");
     if (state.facePresent !== null) form.append("face_present", String(state.facePresent));
     if (state.faceConfidence !== null) form.append("face_confidence", String(state.faceConfidence));
-    el.stageValue.textContent = "анализ…";
     setStatus("пульс: анализ (первый запуск до ~1 мин)");
-    const analysis = await requestForm("/v1/services/rppg/analyze-video", form);
+    const stopElapsed = startElapsed("АНАЛИЗ");
+    let analysis;
+    try {
+      analysis = await analyze(requestForm("/v1/services/rppg/analyze-video", form));
+    } finally {
+      stopElapsed();
+    }
     state.serviceEvidence.rppg = analysis.evidence;
     state.pulse = {
       bpm: analysis.evidence.bpm ?? null,
@@ -802,6 +881,11 @@ async function micPreflight() {
 async function recordAudio() {
   const audioStep = getStep("audio_phrase");
   await micPreflight();
+  await prepPause(
+    "ФРАЗА ЧЕРЕЗ",
+    "Произнесите фразу сразу, как она появится. Попытка одна — говорите чётко.",
+    3000,
+  );
 
   // One phrase, one recording, no retries: every extra attempt re-opens the
   // window between phrase disclosure and submission — exactly the time a
@@ -828,9 +912,11 @@ async function recordAudio() {
     const started = performance.now();
     const stopCountdown = startCountdown(audioStep.duration_ms || 6000, "ГОВОРИТЕ");
     el.stepHint.textContent = `Произнесите: «${issue.phrase}»`;
+    el.stage.classList.add("recording");
     try {
       blob = await recordStreamBlob(stream, audioStep.duration_ms || 6000);
     } finally {
+      el.stage.classList.remove("recording");
       stopCountdown();
       stream.getTracks().forEach((track) => track.stop());
     }
@@ -854,7 +940,7 @@ async function recordAudio() {
   form.append("file", blob, "audio.webm");
   el.stageValue.textContent = "анализ…";
   setStatus("аудио: анализ");
-  const analysis = await requestForm(`/v1/sessions/${state.session.session_id}/audio/analyze`, form);
+  const analysis = await analyze(requestForm(`/v1/sessions/${state.session.session_id}/audio/analyze`, form));
 
   state.serviceEvidence.audio = analysis.evidence;
   state.stepStatus.audio = analysis.status;
@@ -875,7 +961,7 @@ async function analyzeClassifier() {
   form.append("file", blob, "classifier.webm");
   if (state.facePresent !== null) form.append("face_present", String(state.facePresent));
   if (state.faceConfidence !== null) form.append("face_confidence", String(state.faceConfidence));
-  const analysis = await requestForm("/v1/services/classifier/analyze-video", form);
+  const analysis = await analyze(requestForm("/v1/services/classifier/analyze-video", form));
   state.serviceEvidence.classifier = analysis.evidence;
   logCheck("classifier", analysis);
   setStatus(`классификатор: ${statusRu(analysis.status)}`);
@@ -1166,4 +1252,5 @@ async function exitFullscreenIfOwned() {
   }
 }
 
+FLOW.forEach(() => el.progressDots.appendChild(document.createElement("i")));
 renderStep();
