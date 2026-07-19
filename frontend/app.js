@@ -667,26 +667,36 @@ async function runFaceFlashLight(pairs) {
   el.currentStep.textContent = "Проверка вспышками света";
   setStatus("вспышки света");
 
-  let analysis = await captureAndAnalyzeFlashPairs(pairs);
-  if (analysis.status !== "passed") {
-    logLine(`активный свет: ${statusRu(analysis.status)} — повторная попытка`);
-    setStatus("свет: повторная попытка");
-    analysis = await captureAndAnalyzeFlashPairs(pairs);
-  }
+  // Enter fullscreen once, while the user's tap still counts as activation, and
+  // hold it across both attempts. A retry has no fresh gesture, so a per-attempt
+  // requestFullscreen would be rejected on mobile and the second attempt would
+  // fall out of fullscreen — where Chrome repaints the flash overlay unreliably.
+  await enterFullscreenIfPossible();
+  try {
+    let analysis = await captureAndAnalyzeFlashPairs(pairs);
+    if (analysis.status !== "passed") {
+      logLine(`активный свет: ${statusRu(analysis.status)} — повторная попытка`);
+      setStatus("свет: повторная попытка");
+      analysis = await captureAndAnalyzeFlashPairs(pairs);
+    }
 
-  state.serviceEvidence.active_light = analysis.evidence;
-  state.stepStatus.active_light = analysis.status;
-  state.expectedLuma = pairs.map((pair) => pair.lighting.lighting_rgb?.[0] ?? 255);
-  state.observedLuma = new Array(pairs.length).fill(0);
-  logCheck("active_light", analysis);
-  setStatus(`свет: ${statusRu(analysis.status)}`);
+    state.serviceEvidence.active_light = analysis.evidence;
+    state.stepStatus.active_light = analysis.status;
+    state.expectedLuma = pairs.map((pair) => pair.lighting.lighting_rgb?.[0] ?? 255);
+    state.observedLuma = new Array(pairs.length).fill(0);
+    logCheck("active_light", analysis);
+    setStatus(`свет: ${statusRu(analysis.status)}`);
+  } finally {
+    await exitFullscreenIfOwned();
+  }
 }
 
 async function captureAndAnalyzeFlashPairs(pairs) {
   const manifestPairs = [];
   const form = new FormData();
 
-  await enterFullscreenIfPossible();
+  // Fullscreen is owned by runFaceFlashLight (held across the retry); this only
+  // toggles the overlay per attempt.
   el.flashFullscreen.classList.add("visible");
   state.suppressPulseCollection = true;
   try {
@@ -725,7 +735,6 @@ async function captureAndAnalyzeFlashPairs(pairs) {
     el.flashFullscreen.style.backgroundImage = "";
     el.stage.style.backgroundImage = "";
     el.stage.style.backgroundColor = "#202020";
-    await exitFullscreenIfOwned();
   }
 
   form.append("manifest", JSON.stringify({ pairs: manifestPairs }));
