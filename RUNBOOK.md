@@ -43,19 +43,20 @@ cd /home/master/work/alfa-deepfake/riskapi_and_ml_service
 
 ## 1. Запуск
 
-Перед первым запуском положите веса в `./models`. Для Faster-Whisper medium и
-InsightFace `buffalo_l` из корня репозитория есть готовая команда:
+Почти все веса приезжают с клоном через Git LFS: `models/v15/` (деревья, гейт,
+GBM-слияние v16, калибратор, Noise-CNN 5×111МБ), WavLM-чекпоинт
+(`models/audio/`) и ASR-модель Faster-Whisper medium (`models/asr/`, ~1.5ГБ).
+На хосте должен стоять `git-lfs`, иначе вместо весов приедут pointer-файлы —
+тогда `git lfs pull` или scp из релизного бандла (`v16_release`,
+`cnn/artifacts_v15b/noise_cnn_global/`).
+
+Не закоммичен только InsightFace `buffalo_l` — перед первым запуском:
 
 ```bash
 bash scripts/download_runtime_models.sh
 ```
 
-Она скачивает модели в `models/asr/faster-whisper-medium/` и
-`models/insightface/models/buffalo_l/`. Деревья/гейт/GBM-слияние v16/калибратор
-уже закоммичены в `models/v15/`; веса Noise-CNN (`models/v15/cnn/*.pt`,
-5×111МБ) и WavLM-чекпоинт (`models/audio/`) трекаются через Git LFS — при
-чекауте без LFS копируются на хост отдельно (scp из релизного бандла
-`v16_release`, `cnn/artifacts_v15b/noise_cnn_global/`).
+(скрипт также перекачивает ASR-модель — пригодится на чекауте без LFS).
 
 ```bash
 docker compose up -d --build      # собрать образы и поднять в фоне
@@ -82,8 +83,10 @@ curl -s http://localhost:8002/health   # risk-api   -> {"status":"ok"}  (ok = Mo
 ```bash
 python3 scripts/smoke_stack.py
 ```
-Ожидаемо: `"decision": "allow"`. Тест создаёт сессию в ML, шлёт evidence,
-ML считает скор и отправляет статус+результат в risk-api → Mongo.
+Ожидаемо: `"decision": "review"`. Тест создаёт сессию в ML, выпускает
+аудио-фразу и шлёт evidence без реальной речи, поэтому аудио-чек остаётся
+без серверного анализа и решение детерминированно попадает в review; скор
+и статус при этом проходят полный путь ML → risk-api → Mongo.
 
 Убедиться, что результат реально записан в Mongo:
 ```bash
@@ -206,4 +209,4 @@ docker compose up -d
 | Аудио-чек отдаёт «model is not configured» | Нет `models/audio/wavlm_all4_best.pt` на хосте. Compose монтирует весь `./models` в `/app/models` — скопировать чекпоинт и перезапустить `ml-service`. |
 | Аудио-чек = «phrase transcript is unavailable» | Нет локальной модели `models/asr/faster-whisper-medium/` или каталог неполный. Скопировать CTranslate2-снапшот (`model.bin`, `config.json`, `tokenizer.json`, `vocabulary.txt`) на хост и перезапустить `ml-service`; образ не скачивает модели. |
 | Первый запрос пульса долгий | Модель open-rppg строится ~1 мин; она греется в фоне при старте контейнера — дать сервису минуту после `up`. |
-| Нужен GPU/тяжёлые модели | Базовый образ работает без них (адаптеры отдают «unavailable»). Для инференса моделей — доукомплектовать образ torch + чекпоинтами `neiro_model/`, см. комментарий в `Dockerfile` и `docker-compose.gpu.yml`. |
+| Нужен GPU | Базовый образ работает на CPU. Для GPU-инференса ASR — CUDA-сборка torch в образе, см. комментарий в `Dockerfile` и `docker-compose.gpu.yml`. |

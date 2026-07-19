@@ -4,7 +4,7 @@ Production contour for anti-deepfake verification. The service owns challenge ge
 
 ## What is included
 
-- FastAPI ML service with `/health`, `/v1/sessions`, `/v1/sessions/{id}/challenge`, `/v1/sessions/{id}/evidence`, and `/v1/score`.
+- FastAPI ML service with `/health`, `/v1/sessions`, `/v1/sessions/{id}/challenge`, `/v1/sessions/{id}/audio/phrase`, `/v1/sessions/{id}/audio/analyze`, `/v1/sessions/{id}/evidence`, `/v1/score`, and per-check `/v1/services/*` analysis endpoints (active-light, gesture, rppg, classifier, audio).
 - Cascaded checks for frame classifier output, active light response, rPPG signal, gesture challenge, and audio challenge.
 - Explainable score payload compatible with the existing `deepfake-riskapi` `/checks/{check_id}/result` JSON contract.
 - Dockerfile and docker compose for `ml-service`, `risk-api`, and MongoDB.
@@ -60,13 +60,7 @@ curl -X POST http://localhost:8100/v1/sessions/{session_id}/evidence \
 
 ## Frontend
 
-The frontend in `frontend/` is a browser challenge console. It creates a session, renders active light flashes, samples camera luminance, asks for the gesture challenge, records an audio snippet, and submits evidence to the ML service.
-
-Current MVP limitations:
-
-- Gesture verification is a user-confirmed placeholder until the MediaPipe detector is moved into the frontend or a backend upload flow.
-- Audio recording is captured in-browser, while ASR and synthetic speech inference are represented as evidence fields until the audio model endpoint is wired.
-- rPPG is sent as a provisional signal in the demo flow; the service-side detector interface is ready for the real rPPG adapter.
+The frontend in `frontend/` is a browser challenge console. It creates a session, renders the colored face-flash challenge and uploads the captured frame pairs, records gesture and rPPG video clips for server-side analysis, requests a short-TTL audio phrase and uploads the recording for server-side ASR + anti-spoof scoring, and finally submits the evidence bundle. The API base URL lives in `frontend/config.js` (baked into the image at build time).
 
 ## Model adapters
 
@@ -87,7 +81,7 @@ The current production code is adapter-based. Heavy models are optional at servi
   trees still fire (mean ≥ `t_susp` from `v15_blend_config.json`) a fused
   REAL verdict is overridden to failed (v16 forensic override). Models dir is
   `ML_VIDEO_V15_DIR` (default `models/v15`). When the bundle is absent, the
-  adapter falls back to `neiro_model/video_infer.py` CLIP checkpoints.
+  classifier check reports "model is not configured".
 - Audio anti-spoof: WavLM classifier (vendored `deepfake_audio/` inference code,
   4-generator checkpoint at `ML_AUDIO_MODEL_PATH`, default
   `models/audio/wavlm_all4_best.pt`). The checkpoint is git-ignored (380MB) and
@@ -107,18 +101,19 @@ them in these host paths (all are mounted read-only):
   `models/v15/cnn/noise_cnn_holdout_*.pt` are tracked via Git LFS — on a
   checkout without LFS, copy them from the release bundle
   (`cnn/artifacts_v15b/noise_cnn_global/`) via scp;
-- `models/audio/wavlm_all4_best.pt`: WavLM anti-spoof checkpoint;
+- `models/audio/wavlm_all4_best.pt`: WavLM anti-spoof checkpoint, tracked via
+  Git LFS;
 - `models/asr/faster-whisper-medium/`: local CTranslate2 Faster-Whisper model
-  (`model.bin`, `config.json`, `tokenizer.json`, `vocabulary.txt`);
+  (`model.bin`, `config.json`, `tokenizer.json`, `vocabulary.txt`), tracked via
+  Git LFS (~1.5 GB — an LFS clone pulls it automatically);
 - `models/insightface/models/buffalo_l/`: the InsightFace `buffalo_l` model
-  pack required by `train/face_crop.py` for the aligned 512×512 face crop.
+  pack required by `train/face_crop.py` for the aligned 512×512 face crop —
+  NOT committed, download it with the script below.
 
-The rPPG weights are packaged by the `open-rppg` dependency. The optional CLIP
-fallback, if used instead of the v16 ensemble, also remains external at
-`models/video/clip_vit_b16_deepfake_best.pt`.
+The rPPG weights are packaged by the `open-rppg` dependency.
 
-From the repository root, download the ASR and alignment models into those
-directories with:
+From the repository root, download the InsightFace pack (and re-download the
+ASR model on a checkout without Git LFS) with:
 
 ```bash
 bash scripts/download_runtime_models.sh
@@ -137,7 +132,6 @@ This makes the service deployable before GPU dependencies and final model packag
 
 1. Add a Pydantic evidence schema in `ml_service/api/schemas.py` if the model needs new input fields.
 2. Add scoring logic in `ml_service/core/checks.py` that returns `CheckScore`.
-3. Implement `SignalDetector` in `ml_service/core/detectors.py` or a new module.
-4. Register it in `default_detector_registry()`.
+3. Call it from `CascadeScorer._evaluate` in `ml_service/core/scoring.py`.
 
 The HTTP API and final risk aggregation do not need to change when a detector only adds a new `CheckScore`.
