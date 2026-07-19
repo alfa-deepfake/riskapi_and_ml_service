@@ -193,11 +193,11 @@ function startCountdown(totalMs, label) {
   return () => window.clearInterval(timer);
 }
 
-async function recordWithCountdown(durationMs, label) {
+async function recordWithCountdown(durationMs, label, bitsPerSecond) {
   const stop = startCountdown(durationMs, label);
   el.stage.classList.add("recording");
   try {
-    return await recordVideoBlob(durationMs);
+    return await recordVideoBlob(durationMs, bitsPerSecond);
   } finally {
     stop();
     el.stage.classList.remove("recording");
@@ -463,7 +463,7 @@ async function runLight() {
     setStatus(`свет: ${statusRu(analysis.status)}`);
     return;
   }
-  await prepPause("ВСПЫШКИ ЧЕРЕЗ", "Сейчас экран будет мигать цветными вспышками. Держите лицо в овале.", 2500);
+  await prepPause("ВСПЫШКИ ЧЕРЕЗ", "Сейчас экран будет мигать цветными вспышками. Держите лицо в овале.", 1500);
   if (Array.isArray(step.payload.face_flash_pairs) && step.payload.face_flash_pairs.length) {
     return runFaceFlashLight(step.payload.face_flash_pairs);
   }
@@ -558,16 +558,16 @@ async function captureAndAnalyzeFlashPairs(pairs) {
       renderFaceFlashFrame(pair.background);
       el.stageValue.textContent = `ФОН ${index + 1}/${pairs.length}`;
       await settleFlashPhase();
-      const backgroundFile = `active_light_bg_${index}.png`;
-      // The verifier crops faces to 256px — full-res 720p PNGs only bloat the
-      // upload (16 files, tens of MB through a tunnel); 640-wide is plenty.
-      form.append("files", await captureCameraPngBlob(640), backgroundFile);
+      const backgroundFile = `active_light_bg_${index}.jpg`;
+      // The verifier crops faces to 256px — full-res 720p frames only bloat the
+      // upload (16 files through a tunnel); 640-wide JPEG is plenty.
+      form.append("files", await captureCameraJpegBlob(640), backgroundFile);
 
       renderFaceFlashFrame(pair.lighting);
       el.stageValue.textContent = `СВЕТ ${index + 1}/${pairs.length}`;
       await settleFlashPhase();
-      const lightingFile = `active_light_light_${index}.png`;
-      form.append("files", await captureCameraPngBlob(640), lightingFile);
+      const lightingFile = `active_light_light_${index}.jpg`;
+      form.append("files", await captureCameraJpegBlob(640), lightingFile);
 
       manifestPairs.push({
         background_file: backgroundFile,
@@ -658,7 +658,7 @@ function rgbCss(rgb) {
 async function confirmGesture() {
   const gesture = getStep("gesture");
   setStatus("запись жеста");
-  const blob = await recordWithCountdown(gesture.duration_ms || 5000, "ЗАПИСЬ");
+  const blob = await recordWithCountdown(gesture.duration_ms || 5000, "ЗАПИСЬ", 2_500_000);
   const form = new FormData();
   form.append("file", blob, "gesture.webm");
   form.append("expected_action", gesture.payload.expected_action);
@@ -787,7 +787,7 @@ async function recordAudio() {
   await prepPause(
     "ФРАЗА ЧЕРЕЗ",
     "Произнесите фразу сразу, как она появится. Попытка одна — говорите чётко.",
-    3000,
+    2000,
   );
 
   // One phrase, one recording, no retries: every extra attempt re-opens the
@@ -1024,14 +1024,14 @@ function getPulseValues() {
   return state.pulseSamples.map((sample) => sample.value);
 }
 
-async function recordVideoBlob(durationMs) {
+async function recordVideoBlob(durationMs, bitsPerSecond) {
   if (!state.stream) {
     throw new Error("Для записи жеста требуется поток камеры");
   }
-  return recordStreamBlob(state.stream, durationMs);
+  return recordStreamBlob(state.stream, durationMs, bitsPerSecond);
 }
 
-async function captureCameraPngBlob(maxWidth) {
+async function captureCameraJpegBlob(maxWidth) {
   if (!state.stream || el.camera.readyState < 2) {
     throw new Error("Для захвата кадра требуется поток камеры");
   }
@@ -1047,21 +1047,26 @@ async function captureCameraPngBlob(maxWidth) {
   const ctx = canvas.getContext("2d");
   ctx.drawImage(el.camera, 0, 0, canvas.width, canvas.height);
   return new Promise((resolve, reject) => {
+    // JPEG q0.92, not PNG: ~5-8x smaller upload. The active-light metric is
+    // face luma over a 256px crop and JPEG keeps the luma plane full-res, so
+    // this is accuracy-neutral. The server decodes by content (cv2.imread),
+    // not by the file extension.
     canvas.toBlob((blob) => {
       if (blob) resolve(blob);
       else reject(new Error("Не удалось закодировать кадр камеры"));
-    }, "image/png");
+    }, "image/jpeg", 0.92);
   });
 }
 
-async function recordStreamBlob(stream, durationMs) {
+async function recordStreamBlob(stream, durationMs, bitsPerSecond = 6_000_000) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let recorder;
     try {
-      // Default ~2.5 Mbps VP8 smears the high-frequency detail the forensic
-      // video classifier scores; ask for more (ignored on audio-only streams).
-      recorder = new MediaRecorder(stream, { videoBitsPerSecond: 6_000_000 });
+      // Default 6 Mbps: the forensic classifier + rPPG need the high-frequency
+      // detail. Gesture only feeds mediapipe landmarks and passes 2.5 Mbps to
+      // shrink its upload. Ignored on audio-only streams.
+      recorder = new MediaRecorder(stream, { videoBitsPerSecond: bitsPerSecond });
     } catch (error) {
       reject(error);
       return;
