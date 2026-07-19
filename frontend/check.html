@@ -66,7 +66,7 @@
               </div>
               <div class="console-top-right">
                 <div class="progress-dots" id="progressDots" aria-hidden="true"></div>
-                <div class="status" id="status">ожидание</div>
+                <div class="status" id="status" role="status" aria-live="polite">ожидание</div>
               </div>
             </header>
 
@@ -81,7 +81,7 @@
                   <div class="stage-overlay">
                     <p id="currentStep">Проверка не запущена</p>
                     <strong id="stageValue">Готовы?</strong>
-                    <small id="stepHint">Нажмите «Начать проверку» — понадобится доступ к камере и микрофону.</small>
+                    <small id="stepHint" aria-live="polite">Нажмите «Начать проверку» — понадобится доступ к камере и микрофону.</small>
                   </div>
                 </div>
 
