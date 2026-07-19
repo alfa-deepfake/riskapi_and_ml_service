@@ -208,5 +208,5 @@ docker compose up -d
 | Пересобрал ml_service, а изменений нет | `docker compose up -d --build ml-service` (без `--build` образ не пересобирается). |
 | Аудио-чек отдаёт «model is not configured» | Нет `models/audio/wavlm_all4_best.pt` на хосте. Compose монтирует весь `./models` в `/app/models` — скопировать чекпоинт и перезапустить `ml-service`. |
 | Аудио-чек = «phrase transcript is unavailable» | Нет локальной модели `models/asr/faster-whisper-medium/` или каталог неполный. Скопировать CTranslate2-снапшот (`model.bin`, `config.json`, `tokenizer.json`, `vocabulary.txt`) на хост и перезапустить `ml-service`; образ не скачивает модели. |
-| Первый запрос пульса долгий | Модель open-rppg строится ~1 мин; она греется в фоне при старте контейнера — дать сервису минуту после `up`. |
+| Первый запрос пульса долгий | Ансамбль open-rppg (3 модели) греется в фоне при старте, ~1 мин на модель. Первый запрос ждёт только основную модель; остальные подключаются к ансамблю по мере прогрева. |
 | Нужен GPU | Базовый образ работает на CPU. Для GPU-инференса ASR — CUDA-сборка torch в образе, см. комментарий в `Dockerfile` и `docker-compose.gpu.yml`. |

@@ -103,6 +103,9 @@ class RppgEvidence(BaseModel):
     sample_rate_hz: float | None = Field(default=None, gt=0.0)
     window_seconds: float | None = Field(default=None, gt=0.0)
     detector: str | None = None
+    # Per-estimator readings (bpm/sqi/snr keyed by estimator name) when the
+    # ensemble runtime produced the evidence — kept for explainability.
+    ensemble: dict[str, float | None] = Field(default_factory=dict)
     face_present: bool | None = None
     face_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 

@@ -149,6 +149,9 @@ def _stub_rppg_model(monkeypatch, process_video):
     from ml_service.services import rppg_service as module
 
     class FakeModel:
+        def __init__(self, *_args) -> None:
+            pass
+
         def process_video(self, path):
             return process_video(path)
 
@@ -172,7 +175,7 @@ async def test_rppg_runtime_clamps_out_of_range_bpm(monkeypatch):
         module._rppg_model.cache_clear()
     assert result["bpm"] is None
     assert result["signal_quality"] == 1.0
-    assert result["detector"] == "open-rppg-facephys"
+    assert result["detector"] == "open-rppg-ensemble"
     assert result["face_present"] is None
 
 
@@ -187,7 +190,7 @@ async def test_rppg_runtime_handles_no_signal_result(monkeypatch):
         module._rppg_model.cache_clear()
     assert result["bpm"] is None
     assert result["signal_quality"] is None
-    assert result["detector"] == "open-rppg-facephys"
+    assert result["detector"] == "open-rppg-ensemble"
 
 
 @pytest.mark.anyio

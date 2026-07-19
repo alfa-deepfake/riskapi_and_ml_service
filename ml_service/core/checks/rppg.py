@@ -95,6 +95,8 @@ def _score_python_rppg(evidence: RppgEvidence) -> CheckScore:
         "hrv": evidence.hrv,
         "detector": evidence.detector,
     }
+    if evidence.ensemble:
+        details["ensemble"] = evidence.ensemble
     if sqi is None:
         return CheckScore(
             name="rppg",
