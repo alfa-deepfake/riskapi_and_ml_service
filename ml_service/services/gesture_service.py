@@ -61,30 +61,6 @@ class PoseLandmark(IntEnum):
     MOUTH_RIGHT = 10
 
 
-class HandLandmark(IntEnum):
-    WRIST = 0
-    THUMB_CMC = 1
-    THUMB_MCP = 2
-    THUMB_IP = 3
-    THUMB_TIP = 4
-    INDEX_FINGER_MCP = 5
-    INDEX_FINGER_PIP = 6
-    INDEX_FINGER_DIP = 7
-    INDEX_FINGER_TIP = 8
-    MIDDLE_FINGER_MCP = 9
-    MIDDLE_FINGER_PIP = 10
-    MIDDLE_FINGER_DIP = 11
-    MIDDLE_FINGER_TIP = 12
-    RING_FINGER_MCP = 13
-    RING_FINGER_PIP = 14
-    RING_FINGER_DIP = 15
-    RING_FINGER_TIP = 16
-    PINKY_MCP = 17
-    PINKY_PIP = 18
-    PINKY_DIP = 19
-    PINKY_TIP = 20
-
-
 @dataclass(frozen=True)
 class Point:
     x: float
@@ -92,28 +68,9 @@ class Point:
     visibility: float = 1.0
 
 
-@dataclass(frozen=True)
-class Target:
-    name: str
-    resolver: Callable[[object, object], Point | None]
-
-
-@dataclass(frozen=True)
-class FingerTrace:
-    landmarks: tuple[Point, ...]
-
-    @property
-    def tip(self) -> Point:
-        return self.landmarks[-1]
-
-
-FINGER_CHAINS: tuple[tuple[HandLandmark, ...], ...] = (
-    (HandLandmark.WRIST, HandLandmark.THUMB_CMC, HandLandmark.THUMB_MCP, HandLandmark.THUMB_IP, HandLandmark.THUMB_TIP),
-    (HandLandmark.WRIST, HandLandmark.INDEX_FINGER_MCP, HandLandmark.INDEX_FINGER_PIP, HandLandmark.INDEX_FINGER_DIP, HandLandmark.INDEX_FINGER_TIP),
-    (HandLandmark.WRIST, HandLandmark.MIDDLE_FINGER_MCP, HandLandmark.MIDDLE_FINGER_PIP, HandLandmark.MIDDLE_FINGER_DIP, HandLandmark.MIDDLE_FINGER_TIP),
-    (HandLandmark.WRIST, HandLandmark.RING_FINGER_MCP, HandLandmark.RING_FINGER_PIP, HandLandmark.RING_FINGER_DIP, HandLandmark.RING_FINGER_TIP),
-    (HandLandmark.WRIST, HandLandmark.PINKY_MCP, HandLandmark.PINKY_PIP, HandLandmark.PINKY_DIP, HandLandmark.PINKY_TIP),
-)
+# mediapipe hand-landmark ids for the five fingertips — the only points the
+# touch detector reads.
+FINGERTIP_IDS = (4, 8, 12, 16, 20)
 
 
 def _run_touch_detector(
@@ -130,7 +87,7 @@ def _run_touch_detector(
         raise RuntimeError("gesture runtime requires opencv-python") from exc
     mp = _import_mediapipe()
 
-    target = TARGETS.get(_target_name_from_action(expected_action))
+    target = TARGETS.get(expected_action.removeprefix("touch_"))
     if target is None:
         raise RuntimeError(f"unsupported gesture action: {expected_action}")
 
@@ -174,15 +131,15 @@ def _run_touch_detector(
                 face_results = face_mesh.process(rgb)
                 rgb.flags.writeable = True
 
-                target_point = target.resolver(pose_results, face_results)
+                target_point = target(pose_results, face_results)
                 if target_point is not None:
                     face_frames += 1
-                fingers = _iter_fingers(hand_results)
-                if target_point is None or not fingers:
+                fingertips = _iter_fingertips(hand_results)
+                if target_point is None or not fingertips:
                     touch_streak = 0
                     continue
 
-                closest_distance = min(_normalized_distance(finger.tip, target_point) for finger in fingers)
+                closest_distance = min(_normalized_distance(tip, target_point) for tip in fingertips)
                 best_distance = closest_distance if best_distance is None else min(best_distance, closest_distance)
                 touching = closest_distance <= threshold
                 touch_streak = touch_streak + 1 if touching else 0
@@ -269,10 +226,6 @@ def _midpoint(left: Point | None, right: Point | None) -> Point | None:
     return Point((left.x + right.x) / 2.0, (left.y + right.y) / 2.0, min(left.visibility, right.visibility))
 
 
-def _pose_target(landmark_id: PoseLandmark) -> Callable[[object, object], Point | None]:
-    return lambda pose_results, _face_results: _pose_point(pose_results, landmark_id)
-
-
 def _face_target(*landmark_ids: int) -> Callable[[object, object], Point | None]:
     return lambda _pose_results, face_results: _face_point(face_results, landmark_ids)
 
@@ -288,42 +241,23 @@ def _nose_target(pose_results: object, face_results: object) -> Point | None:
     return _face_point(face_results, (1, 4, 5)) or _pose_point(pose_results, PoseLandmark.NOSE)
 
 
-TARGETS: dict[str, Target] = {
-    "nose": Target("nose", _nose_target),
-    "mouth": Target("mouth", _mouth_target),
-    "left_eye": Target("left_eye", _face_target(33, 133)),
-    "right_eye": Target("right_eye", _face_target(362, 263)),
+TARGETS: dict[str, Callable[[object, object], Point | None]] = {
+    "nose": _nose_target,
+    "mouth": _mouth_target,
+    "left_eye": _face_target(33, 133),
+    "right_eye": _face_target(362, 263),
 }
 
 
-def _target_name_from_action(action: str) -> str:
-    mapping = {
-        "touch_mouth": "mouth",
-        "touch_nose": "nose",
-        "touch_left_eye": "left_eye",
-        "touch_right_eye": "right_eye",
-    }
-    return mapping.get(action, action.removeprefix("touch_"))
-
-
-def _iter_fingers(hand_results: object) -> list[FingerTrace]:
+def _iter_fingertips(hand_results: object) -> list[Point]:
     if not hand_results or not hand_results.multi_hand_landmarks:
         return []
-    fingers: list[FingerTrace] = []
+    tips: list[Point] = []
     for hand_landmarks in hand_results.multi_hand_landmarks:
-        for chain in FINGER_CHAINS:
-            fingers.append(
-                FingerTrace(
-                    tuple(
-                        Point(
-                            hand_landmarks.landmark[int(landmark_id)].x,
-                            hand_landmarks.landmark[int(landmark_id)].y,
-                        )
-                        for landmark_id in chain
-                    )
-                )
-            )
-    return fingers
+        for tip_id in FINGERTIP_IDS:
+            landmark = hand_landmarks.landmark[tip_id]
+            tips.append(Point(landmark.x, landmark.y))
+    return tips
 
 
 def _normalized_distance(a: Point, b: Point) -> float:

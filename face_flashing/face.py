@@ -18,7 +18,6 @@ def bgr_to_rgb(image_bgr: np.ndarray) -> np.ndarray:
 @dataclass
 class ExtractedFace:
     image_rgb: np.ndarray
-    box: tuple[int, int, int, int]  # x0, y0, side, side in source pixels
 
 
 class FaceExtractor:
@@ -59,7 +58,7 @@ class FaceExtractor:
         if crop.size == 0:
             return None
         crop = cv2.resize(crop, (self.crop_size, self.crop_size), interpolation=cv2.INTER_AREA)
-        return ExtractedFace(image_rgb=crop, box=box)
+        return ExtractedFace(image_rgb=crop)
 
     def _detect_box(self, image_rgb: np.ndarray) -> tuple[int, int, int, int] | None:
         results = None

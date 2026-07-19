@@ -10,17 +10,6 @@ def clamp01(value: float) -> float:
     return max(0.0, min(1.0, value))
 
 
-def normalize_luma(values: list[float]) -> list[float]:
-    if not values:
-        return []
-    min_value = min(values)
-    max_value = max(values)
-    span = max_value - min_value
-    if span <= 1e-9:
-        return [0.0 for _ in values]
-    return [(value - min_value) / span for value in values]
-
-
 def pearson_correlation(left: list[float], right: list[float]) -> float | None:
     n = min(len(left), len(right))
     if n < 3:

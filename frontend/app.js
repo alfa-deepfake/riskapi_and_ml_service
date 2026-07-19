@@ -78,7 +78,6 @@ const state = {
   stepStatus: {},
   expectedLuma: [],
   observedLuma: [],
-  gestureDone: false,
   pulse: null,
   audio: null,
 };
@@ -434,7 +433,6 @@ function resetEvidence() {
   state.stepStatus = {};
   state.expectedLuma = [];
   state.observedLuma = [];
-  state.gestureDone = false;
   state.pulse = null;
   state.audio = null;
   state.pulseSamples = [];
@@ -783,7 +781,6 @@ async function confirmGesture() {
   const analysis = await analyze(requestForm("/v1/services/gesture/analyze-video", form));
   state.serviceEvidence.gesture = analysis.evidence;
   state.gestureAttempt = analysis.evidence;
-  state.gestureDone = analysis.status === "passed";
   state.stepStatus.gesture = analysis.status;
   logCheck("gesture", analysis);
   setStatus(`жест: ${statusRu(analysis.status)}`);
@@ -1100,7 +1097,6 @@ function applySkipEvidence(id) {
     state.serviceEvidence.active_light = { skipped: true };
   }
   if (id === "gesture") {
-    state.gestureDone = false;
     state.gestureAttempt = { detector: "skipped", observed_action: null, confidence: 0 };
     state.serviceEvidence.gesture = { skipped: true };
   }

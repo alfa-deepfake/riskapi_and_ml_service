@@ -102,7 +102,7 @@ def test_unresponsive_face_fails():
 
 def test_result_dict_matches_service_contract():
     result = ActiveLightLivenessVerifier().verify(_make_pairs(responsive=True))
-    payload = active_light_result_to_dict(result, include_pairs=False)
+    payload = active_light_result_to_dict(result)
     assert set(payload) == {
         "score",
         "pair_count",

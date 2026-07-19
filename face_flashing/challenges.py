@@ -14,11 +14,8 @@ class Challenge:
     lighting_rgb: tuple[int, int, int] | None = None
     stripe_top: int | None = None
     stripe_bottom: int | None = None
-    width: int = 1280
     height: int = 720
-    index: int = 0
     pair_index: int = 0
-    period_seconds: float = 0.12
 
     @classmethod
     def from_dict(cls, data: dict) -> "Challenge":
@@ -31,11 +28,8 @@ class Challenge:
             lighting_rgb=rgb(data.get("lighting_rgb")),
             stripe_top=data.get("stripe_top"),
             stripe_bottom=data.get("stripe_bottom"),
-            width=int(data.get("width", 1280)),
             height=int(data.get("height", 720)),
-            index=int(data.get("index", 0)),
             pair_index=int(data.get("pair_index", 0)),
-            period_seconds=float(data.get("period_seconds", 0.12)),
         )
 
     def mean_screen_rgb(self) -> tuple[float, float, float]:

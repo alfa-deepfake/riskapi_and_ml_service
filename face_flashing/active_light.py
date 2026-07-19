@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -40,7 +40,6 @@ class ActiveLightResult:
     median_response_snr: float
     median_response_magnitude: float
     mean_color_cosine: float
-    pairs: list[PairMetrics] = field(default_factory=list)
 
 
 class ActiveLightLivenessVerifier:
@@ -109,7 +108,6 @@ class ActiveLightLivenessVerifier:
             median_response_snr=median_snr,
             median_response_magnitude=median_magnitude,
             mean_color_cosine=mean_cosine,
-            pairs=metrics,
         )
 
     def _pair_metrics(self, pair: LightPair) -> PairMetrics | None:
@@ -171,8 +169,8 @@ def _pearson(left: np.ndarray, right: np.ndarray) -> float:
     return float(np.corrcoef(left, right)[0, 1])
 
 
-def active_light_result_to_dict(result: ActiveLightResult, *, include_pairs: bool = True) -> dict:
-    payload = {
+def active_light_result_to_dict(result: ActiveLightResult) -> dict:
+    return {
         "score": result.score,
         "pair_count": result.pair_count,
         "temporal": {
@@ -188,6 +186,3 @@ def active_light_result_to_dict(result: ActiveLightResult, *, include_pairs: boo
         "median_response_magnitude": result.median_response_magnitude,
         "mean_color_cosine": result.mean_color_cosine,
     }
-    if include_pairs:
-        payload["pairs"] = [vars(metric) for metric in result.pairs]
-    return payload

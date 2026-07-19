@@ -77,8 +77,6 @@ class ActiveLightEvidence(BaseModel):
     skipped: bool = False
     expected_luma: list[float] = Field(default_factory=list, max_length=1_000)
     observed_face_luma: list[float] = Field(default_factory=list, max_length=1_000)
-    observed_background_luma: list[float] = Field(default_factory=list, max_length=1_000)
-    frame_timestamps_ms: list[float] = Field(default_factory=list, max_length=1_000)
     detector: str | None = None
     verifier_score: float | None = Field(default=None, ge=0.0, le=1.0)
     pair_count: int | None = Field(default=None, ge=0)
@@ -114,7 +112,6 @@ class GestureEvidence(BaseModel):
     expected_action: str | None = None
     observed_action: str | None = None
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
-    completed_at_ms: float | None = Field(default=None, ge=0.0)
     detector: str | None = None
     face_present: bool | None = None
     frame_count: int | None = Field(default=None, ge=0)

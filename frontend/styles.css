@@ -945,11 +945,6 @@ pre {
   font-weight: 500;
 }
 
-.section-dark code {
-  background: rgba(255, 255, 255, 0.12);
-  color: #ffd9d5;
-}
-
 /* CTA */
 .cta {
   padding: 104px 0;

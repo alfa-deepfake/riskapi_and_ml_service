@@ -156,4 +156,4 @@ async def _run_face_flashing_verifier(*, manifest: str, files: list[UploadFile])
     if not light_pairs:
         raise RuntimeError("no valid face frame pairs for face_flashing verifier")
     result = await run_in_threadpool(ActiveLightLivenessVerifier().verify, light_pairs)
-    return active_light_result_to_dict(result, include_pairs=False)
+    return active_light_result_to_dict(result)
