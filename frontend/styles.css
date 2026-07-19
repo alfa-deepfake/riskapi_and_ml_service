@@ -112,6 +112,25 @@ code {
   display: block;
 }
 
+/* Countdown/instruction over the white screen-torch during the pulse capture.
+   Kept near the top so the light-emitting area stays unobstructed. */
+.flash-message {
+  display: none;
+  position: absolute;
+  top: 10%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--body);
+  font-size: 26px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.55);
+  white-space: nowrap;
+}
+
+.flash-message.visible {
+  display: block;
+}
+
 /* ── Buttons ────────────────────────────────────────────────────────── */
 .btn {
   display: inline-flex;

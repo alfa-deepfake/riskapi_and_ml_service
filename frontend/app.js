@@ -31,6 +31,7 @@ const el = {
   stage: document.querySelector("#challengeStage"),
   stageOverlay: document.querySelector(".stage-overlay"),
   flashFullscreen: document.querySelector("#flashFullscreen"),
+  flashMessage: document.querySelector("#flashMessage"),
   camera: document.querySelector("#camera"),
   faceGuide: document.querySelector("#faceGuide"),
   faceOval: document.querySelector("#faceOval"),
@@ -676,20 +677,19 @@ async function confirmGesture() {
 async function samplePulse() {
   setStatus("запись видео rPPG");
   try {
-    // 18s instead of the original 9: rPPG needs a long stable face window,
-    // and short clips were the main source of low-SQI "unknown" verdicts.
-    const blob = await recordWithCountdown(18000, "ПУЛЬС");
-    const form = new FormData();
-    form.append("file", blob, "rppg.webm");
-    if (state.facePresent !== null) form.append("face_present", String(state.facePresent));
-    if (state.faceConfidence !== null) form.append("face_confidence", String(state.faceConfidence));
-    setStatus("пульс: анализ (первый запуск до ~1 мин)");
-    const stopElapsed = startElapsed("АНАЛИЗ");
+    // Fullscreen is requested once, while the user's tap still counts as an
+    // activation, and held across the retry (same reasoning as the flash check).
+    await enterFullscreenIfPossible();
     let analysis;
     try {
-      analysis = await analyze(requestForm("/v1/services/rppg/analyze-video", form));
+      analysis = await capturePulseAttempt();
+      if (analysis.status !== "passed") {
+        logLine(`пульс: ${statusRu(analysis.status)} — повторная попытка, не двигайтесь`);
+        setStatus("пульс: повторная попытка");
+        analysis = pickBetterPulse(analysis, await capturePulseAttempt());
+      }
     } finally {
-      stopElapsed();
+      await exitFullscreenIfOwned();
     }
     state.serviceEvidence.rppg = analysis.evidence;
     state.pulse = {
@@ -724,6 +724,54 @@ async function samplePulse() {
   state.stepStatus.rppg = analysis.status;
   logCheck("rppg", analysis);
   setStatus("пульс замерен");
+}
+
+// One 18s recording under the screen torch + server analysis. The white
+// overlay turns the display into a light source aimed at the face: in a dim
+// room that is the difference between "no pulse signal" and a clean rPPG read.
+async function capturePulseAttempt() {
+  const durationMs = 18000;
+  el.flashFullscreen.style.backgroundColor = "#ffffff";
+  el.flashFullscreen.classList.add("visible");
+  el.flashMessage.classList.add("visible");
+  const startedAt = performance.now();
+  const render = () => {
+    const left = Math.max(0, durationMs - (performance.now() - startedAt));
+    el.flashMessage.textContent = `Не двигайтесь · ${Math.ceil(left / 1000)} с`;
+  };
+  render();
+  const timer = window.setInterval(render, 250);
+  let blob;
+  try {
+    // 18s instead of the original 9: rPPG needs a long stable face window,
+    // and short clips were the main source of low-SQI "unknown" verdicts.
+    blob = await recordWithCountdown(durationMs, "ПУЛЬС");
+  } finally {
+    window.clearInterval(timer);
+    el.flashMessage.classList.remove("visible");
+    el.flashMessage.textContent = "";
+    el.flashFullscreen.classList.remove("visible");
+    el.flashFullscreen.style.backgroundColor = "";
+  }
+  const form = new FormData();
+  form.append("file", blob, "rppg.webm");
+  if (state.facePresent !== null) form.append("face_present", String(state.facePresent));
+  if (state.faceConfidence !== null) form.append("face_confidence", String(state.faceConfidence));
+  setStatus("пульс: анализ (первый запуск до ~1 мин)");
+  const stopElapsed = startElapsed("АНАЛИЗ");
+  try {
+    return await analyze(requestForm("/v1/services/rppg/analyze-video", form));
+  } finally {
+    stopElapsed();
+  }
+}
+
+// The retry keeps whichever attempt looked better: pass beats non-pass, then
+// higher signal quality wins.
+function pickBetterPulse(first, second) {
+  if (first.status === "passed") return first;
+  if (second.status === "passed") return second;
+  return (second.evidence?.signal_quality ?? 0) >= (first.evidence?.signal_quality ?? 0) ? second : first;
 }
 
 // Level check on arbitrary speech BEFORE any phrase is disclosed: re-tries at
