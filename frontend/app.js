@@ -334,7 +334,29 @@ function advance() {
   renderStep();
 }
 
+// Release the camera and its sampling timers: without this the camera light
+// stays on after reset and every restart orphans another live stream.
+function stopCamera() {
+  if (state.faceTimer) {
+    window.clearInterval(state.faceTimer);
+    state.faceTimer = null;
+  }
+  if (state.pulseTimer) {
+    window.clearInterval(state.pulseTimer);
+    state.pulseTimer = null;
+  }
+  if (state.stream) {
+    state.stream.getTracks().forEach((track) => track.stop());
+    state.stream = null;
+  }
+  el.camera.srcObject = null;
+  el.faceGuide.classList.remove("visible");
+  state.facePresent = null;
+  state.faceConfidence = null;
+}
+
 function resetEvidence() {
+  stopCamera();
   state.stepIndex = 0;
   state.scored = false;
   state.skipped = new Set();
@@ -361,6 +383,7 @@ function resetEvidence() {
 
 el.startVerification.addEventListener("click", async () => {
   try {
+    el.startVerification.disabled = true;
     resetEvidence();
     setStatus("создание сессии");
     state.session = await requestJson("/v1/sessions", {
@@ -376,6 +399,8 @@ el.startVerification.addEventListener("click", async () => {
   } catch (error) {
     setStatus("ошибка сессии");
     alert(error.message);
+  } finally {
+    el.startVerification.disabled = false;
   }
 });
 
@@ -383,7 +408,12 @@ el.primaryAction.addEventListener("click", async () => {
   if (!state.session) return;
   const step = currentFlowStep();
   try {
+    // A restart or reset mid-step would mix the in-flight step's evidence
+    // into a fresh session — lock the flow controls until the step settles.
     el.primaryAction.disabled = true;
+    el.startVerification.disabled = true;
+    el.resetFlow.disabled = true;
+    el.skipStep.disabled = true;
     await runStep(step.id);
     if (step.id !== "score") {
       advance();
@@ -392,6 +422,8 @@ el.primaryAction.addEventListener("click", async () => {
     setStatus(`ошибка: ${step.id}`);
     alert(error.message);
   } finally {
+    el.startVerification.disabled = false;
+    el.resetFlow.disabled = false;
     renderStep();
   }
 });
@@ -788,13 +820,15 @@ async function recordAudio() {
     el.stageValue.textContent = issue.phrase;
     setStatus("запись аудио");
 
-    let analysis;
+    // Only genuine capture failures fall to the browser_recording_failed
+    // path; upload/server errors propagate to the step handler so the user
+    // sees the real cause and the remaining attempts stay usable.
+    let blob;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       const started = performance.now();
       const stopCountdown = startCountdown(audioStep.duration_ms || 6000, "ГОВОРИТЕ");
       el.stepHint.textContent = `Произнесите: «${issue.phrase}»`;
-      let blob;
       try {
         blob = await recordStreamBlob(stream, audioStep.duration_ms || 6000);
       } finally {
@@ -804,11 +838,6 @@ async function recordAudio() {
       state.audio = {
         duration_seconds: (performance.now() - started) / 1000,
       };
-      const form = new FormData();
-      form.append("file", blob, "audio.webm");
-      el.stageValue.textContent = "анализ…";
-      setStatus("аудио: анализ");
-      analysis = await requestForm(`/v1/sessions/${state.session.session_id}/audio/analyze`, form);
     } catch (_error) {
       state.audio = { duration_seconds: 3.0 };
       state.serviceEvidence.audio = {
@@ -821,6 +850,12 @@ async function recordAudio() {
       setStatus("аудио записано");
       return;
     }
+
+    const form = new FormData();
+    form.append("file", blob, "audio.webm");
+    el.stageValue.textContent = "анализ…";
+    setStatus("аудио: анализ");
+    const analysis = await requestForm(`/v1/sessions/${state.session.session_id}/audio/analyze`, form);
 
     state.serviceEvidence.audio = analysis.evidence;
     state.stepStatus.audio = analysis.status;
@@ -930,7 +965,8 @@ async function submitEvidence() {
 function escapeHtml(value) {
   const div = document.createElement("div");
   div.textContent = String(value);
-  return div.innerHTML;
+  // innerHTML escapes <>& but not quotes, and the result lands in title="…".
+  return div.innerHTML.replace(/"/g, "&quot;");
 }
 
 function renderChecksBreakdown(result) {
