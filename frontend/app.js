@@ -130,7 +130,9 @@ const STATUS_RU = {
   skipped: "пропущено",
   pending: "ожидание",
   allow: "разрешено",
-  review: "проверка",
+  // "review" is the uncertain middle verdict (neither a clear live person nor a
+  // clear deepfake); phrase it plainly for the user instead of "проверка".
+  review: "Высокий риск дипфейка",
   deny: "отказано",
 };
 
