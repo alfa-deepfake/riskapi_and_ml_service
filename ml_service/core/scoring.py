@@ -4,17 +4,16 @@ from datetime import datetime, timezone
 
 from ml_service.api.schemas import CheckScore, ScoreRequest, ScoreResponse
 from ml_service.config import Settings
-from ml_service.core.detectors import DetectionContext, DetectorRegistry, default_detector_registry
+from ml_service.core.checks import score_active_light, score_audio, score_classifier, score_gesture, score_rppg
 from ml_service.core.math_utils import clamp01
 
 
 class CascadeScorer:
-    def __init__(self, settings: Settings, registry: DetectorRegistry | None = None) -> None:
+    def __init__(self, settings: Settings) -> None:
         self._settings = settings
-        self._registry = registry or default_detector_registry()
 
     def score(self, request: ScoreRequest) -> ScoreResponse:
-        checks = self._registry.evaluate_all(request, DetectionContext(settings=self._settings))
+        checks = self._evaluate(request)
         risk_score = _weighted_risk(checks)
         confidence = _weighted_confidence(checks)
         decision = _decision(
@@ -33,6 +32,15 @@ class CascadeScorer:
             factors=_factors(checks),
             created_at=datetime.now(timezone.utc),
         )
+
+    def _evaluate(self, request: ScoreRequest) -> list[CheckScore]:
+        return [
+            score_classifier(request.evidence.classifier),
+            score_active_light(request.evidence.active_light, request.challenge, self._settings),
+            score_rppg(request.evidence.rppg, self._settings),
+            score_gesture(request.evidence.gesture, request.challenge),
+            score_audio(request.evidence.audio, request.challenge),
+        ]
 
 
 def _weighted_risk(checks: list[CheckScore]) -> float:

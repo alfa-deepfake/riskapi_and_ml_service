@@ -37,15 +37,9 @@ class Settings(BaseSettings):
     asr_device: str = Field(default="cpu", alias="ML_ASR_DEVICE")
     asr_compute_type: str = Field(default="int8", alias="ML_ASR_COMPUTE_TYPE")
     asr_cpu_threads: int = Field(default=4, ge=1, alias="ML_ASR_CPU_THREADS")
-    video_clip_checkpoint_path: str = Field(
-        default="models/video/clip_vit_b16_deepfake_best.pt",
-        alias="ML_VIDEO_CLIP_CHECKPOINT_PATH",
-    )
-    video_convnext_checkpoint_path: str | None = Field(default=None, alias="ML_VIDEO_CONVNEXT_CHECKPOINT_PATH")
     # Thresholds and gate cutoffs are model artifacts shipped with the v15
     # bundle (v15_blend_config.json), not env-tunable service settings.
     video_v15_dir: str = Field(default="models/v15", alias="ML_VIDEO_V15_DIR")
-    video_device: str = Field(default="auto", alias="ML_VIDEO_DEVICE")
     video_max_inferences: int = Field(default=12, alias="ML_VIDEO_MAX_INFERENCES")
     video_infer_every: int = Field(default=5, alias="ML_VIDEO_INFER_EVERY")
 

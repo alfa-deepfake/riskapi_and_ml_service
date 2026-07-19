@@ -1,11 +1,9 @@
-# GPU override. Requires the full model image: extend Dockerfile to install a CUDA
-# torch build and COPY the neiro_model/ checkpoints (see Dockerfile comment).
-# Without those, the base image still runs — the classifier adapters just report
-# "unavailable" — so GPU inference is a no-op until the models are packaged in.
+# GPU override. Requires a CUDA torch build in the image (see Dockerfile
+# comment). Without it the base image still runs on CPU, so GPU inference is a
+# no-op until the CUDA wheels are packaged in.
 services:
   ml-service:
     environment:
-      ML_VIDEO_DEVICE: auto
       ML_ASR_DEVICE: cuda
       ML_ASR_COMPUTE_TYPE: float16
       NVIDIA_VISIBLE_DEVICES: all
