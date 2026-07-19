@@ -93,7 +93,9 @@ def generate_challenge(seed: int | None = None) -> ChallengePlan:
                 type="gesture",
                 prompt=gesture_prompt,
                 payload={"expected_action": gesture_id},
-                duration_ms=5000,
+                # 7s, not 5: reading the prompt, raising the hand and holding
+                # the touch was routinely clipped mid-gesture at 5s.
+                duration_ms=7000,
             ),
             ChallengeStep(
                 step_id=str(uuid.uuid4()),
