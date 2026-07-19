@@ -18,9 +18,7 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div class="flash-fullscreen" id="flashFullscreen" aria-hidden="true"></div>
-
-    <a class="skip-link" href="#demo">Перейти к проверке</a>
+    <a class="skip-link" href="./check.html">Перейти к проверке</a>
 
     <header class="nav" id="nav">
       <div class="nav-inner">
@@ -37,7 +35,7 @@
 
         <div class="nav-menu" id="navMenu">
           <nav class="nav-links" aria-label="Основная навигация">
-            <a href="#demo">Проверка</a>
+            <a href="./check.html">Проверка</a>
             <a href="#signals">Сигналы</a>
             <a href="#flow">Как это работает</a>
             <a href="#trust">Безопасность</a>
@@ -45,7 +43,7 @@
 
           <div class="nav-actions">
             <a class="btn btn-ghost" href="http://localhost:8100/docs">Документация</a>
-            <a class="btn btn-primary" href="#demo" data-start-demo>Проверить себя</a>
+            <a class="btn btn-primary" href="./check.html">Проверить себя</a>
           </div>
         </div>
 
@@ -73,7 +71,7 @@
           </p>
 
           <div class="hero-actions">
-            <button class="btn btn-primary btn-lg" type="button" data-start-demo>Пройти проверку</button>
+            <a class="btn btn-primary btn-lg" href="./check.html">Пройти проверку</a>
             <a class="btn btn-outline btn-lg" href="#signals">Как устроены проверки</a>
           </div>
 
@@ -81,65 +79,9 @@
         </div>
       </section>
 
-      <!-- ── Живой тест ───────────────────────────────────────────────── -->
-      <section class="demo-section" id="demo">
+      <!-- ── Цифры ────────────────────────────────────────────────────── -->
+      <section class="demo-section">
         <div class="wrap">
-          <article class="console">
-            <header class="console-top">
-              <div>
-                <p class="console-eyebrow">Живая проверка</p>
-                <h2 class="console-title">Сессия верификации</h2>
-              </div>
-              <div class="console-top-right">
-                <div class="status" id="status">ожидание</div>
-                <button class="btn btn-primary" id="startVerification" type="button">Начать проверку</button>
-              </div>
-            </header>
-
-            <div class="console-body">
-              <div class="console-main">
-                <div class="challenge-stage" id="challengeStage">
-                  <video id="camera" autoplay muted playsinline></video>
-                  <div class="face-guide" id="faceGuide" aria-hidden="true">
-                    <div class="face-oval" id="faceOval"></div>
-                    <p class="guide-hint" id="guideHint">Совместите лицо с овалом</p>
-                  </div>
-                  <div class="stage-overlay">
-                    <p id="currentStep">Проверка не запущена</p>
-                    <strong id="stageValue">Готовы?</strong>
-                    <small id="stepHint">Нажмите «Начать проверку» — понадобится доступ к камере и микрофону.</small>
-                  </div>
-                </div>
-
-                <div class="controls">
-                  <button class="btn btn-dark" id="primaryAction" type="button" disabled>Продолжить</button>
-                  <button class="btn btn-outline test-only" id="skipStep" type="button" disabled>Пропустить шаг</button>
-                  <button class="btn btn-outline" id="resetFlow" type="button">Сбросить</button>
-                </div>
-
-                <div class="result-block">
-                  <div class="decision" id="decision">не оценено</div>
-                  <div class="risk-line" id="riskLine"></div>
-                  <div class="checks" id="checksBreakdown"></div>
-                </div>
-              </div>
-            </div>
-
-            <details class="drawer">
-              <summary>Журнал проверки</summary>
-              <pre id="scoreJson"></pre>
-            </details>
-
-            <details class="drawer">
-              <summary>Параметры подключения</summary>
-              <div class="drawer-grid">
-                <label class="field">ML API<input id="apiUrl" value="http://localhost:8100" /></label>
-                <label class="field">UID<input id="uid" /></label>
-                <label class="field">ID проверки<input id="checkId" /></label>
-              </div>
-            </details>
-          </article>
-
           <ul class="stats">
             <li><b>5</b><span>независимых сигналов в одном потоке</span></li>
             <li><b>~40 c</b><span>полный цикл проверки в браузере</span></li>
@@ -266,7 +208,7 @@
           <ul class="trust-list">
             <li><b>Без внешних вызовов.</b> WavLM, Faster-Whisper и InsightFace собираются из локальных файлов, без похода в HuggingFace.</li>
             <li><b>Одноразовый челлендж.</b> Сессия сгорает после оценки, повторная отправка тех же доказательств не проходит.</li>
-            <li><b>Адаптеры вместо монолита.</b> Новый детектор добавляется как <code>SignalDetector</code> — HTTP-контракт не меняется.</li>
+            <li><b>Адаптеры вместо монолита.</b> Новый детектор — это одна scoring-функция в каскаде, HTTP-контракт не меняется.</li>
             <li><b>Честные отказы.</b> Если лица нет в кадре или входное видео восстановлено нейросетью, проверка не «пройдёт по умолчанию».</li>
           </ul>
         </div>
@@ -276,9 +218,9 @@
       <section class="cta" id="start">
         <div class="wrap cta-inner">
           <h2>Попробуйте прямо сейчас</h2>
-          <p>Дайте доступ к камере и пройдите полный цикл за минуту — на этой же странице.</p>
+          <p>Дайте доступ к камере и пройдите полный цикл за минуту на странице проверки.</p>
           <div class="hero-actions">
-            <button class="btn btn-primary btn-lg" type="button" data-start-demo>Пройти проверку</button>
+            <a class="btn btn-primary btn-lg" href="./check.html">Пройти проверку</a>
             <a class="btn btn-outline btn-lg" href="http://localhost:8100/docs">Открыть API</a>
           </div>
         </div>
@@ -314,7 +256,7 @@
           <h4>Платформа</h4>
           <a href="#flow">Поток проверки</a>
           <a href="#trust">Развёртывание</a>
-          <a href="#demo">Живая сессия</a>
+          <a href="./check.html">Живая сессия</a>
         </nav>
 
         <nav class="footer-col" aria-label="Разработчикам">
@@ -330,8 +272,6 @@
       </div>
     </footer>
 
-    <script src="./config.js"></script>
-    <script src="./app.js"></script>
     <script src="./landing.js"></script>
   </body>
 </html>

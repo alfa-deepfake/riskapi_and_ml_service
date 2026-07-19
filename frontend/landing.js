@@ -1,11 +1,9 @@
-// Landing-shell behaviour only: navigation, scroll reveal, and the marketing
-// CTAs that hand off to the verification console in app.js. No check logic here.
+// Page-shell behaviour shared by the landing and the check page: navigation
+// and scroll reveal. No check logic here — that lives in app.js on check.html.
 
 (function () {
   const nav = document.querySelector("#nav");
   const burger = document.querySelector("#navBurger");
-  const startButton = document.querySelector("#startVerification");
-  const demo = document.querySelector("#demo");
 
   // Hairline under the nav only once the page has moved, so the hero sits on an
   // uninterrupted background.
@@ -22,19 +20,6 @@
     link.addEventListener("click", () => {
       nav.classList.remove("open");
       burger.setAttribute("aria-expanded", "false");
-    });
-  });
-
-  // Every "пройти проверку" CTA scrolls to the console and starts a session, so
-  // the landing page and the console never disagree about what the button does.
-  document.querySelectorAll("[data-start-demo]").forEach((trigger) => {
-    trigger.addEventListener("click", (event) => {
-      event.preventDefault();
-      nav.classList.remove("open");
-      burger.setAttribute("aria-expanded", "false");
-      demo.scrollIntoView({ behavior: "smooth", block: "start" });
-      // Let the smooth scroll begin before the camera permission prompt appears.
-      window.setTimeout(() => startButton.click(), 420);
     });
   });
 

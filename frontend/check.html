@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>Проверка — AlfaDeepfake</title>
+    <meta
+      name="description"
+      content="Живая сессия верификации AlfaDeepfake: активный свет, жест, пульс, голос и покадровый анализ видео с объяснимым вердиктом."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="flash-fullscreen" id="flashFullscreen" aria-hidden="true"></div>
+
+    <a class="skip-link" href="#demo">Перейти к проверке</a>
+
+    <header class="nav" id="nav">
+      <div class="nav-inner">
+        <a class="logo" href="./index.html" aria-label="AlfaDeepfake — на главную">
+          <svg class="logo-mark" viewBox="0 0 32 32" aria-hidden="true">
+            <rect width="32" height="32" rx="9" fill="#EF3124" />
+            <g fill="#fff" transform="translate(8.77 5) scale(0.1503)">
+              <path d="M65.59 14.64C62.84 6.46 59.68 0 48.85 0s-14.2 6.43-17.08 14.64L2 99.25h19.74l6.87-20.11h38L73 99.25h21zM34.36 62.15L47.85 22h.5l12.74 40.15z" />
+              <path d="M0 126.41h96.2v19.99H0z" />
+            </g>
+          </svg>
+          <span class="logo-word"><b>Alfa</b>Deepfake</span>
+        </a>
+
+        <div class="nav-menu" id="navMenu">
+          <nav class="nav-links" aria-label="Основная навигация">
+            <a href="./index.html#signals">Сигналы</a>
+            <a href="./index.html#flow">Как это работает</a>
+            <a href="./index.html#trust">Безопасность</a>
+          </nav>
+
+          <div class="nav-actions">
+            <a class="btn btn-ghost" href="http://localhost:8100/docs">Документация</a>
+            <a class="btn btn-outline" href="./index.html">На главную</a>
+          </div>
+        </div>
+
+        <button class="nav-burger" id="navBurger" aria-expanded="false" aria-controls="navMenu" aria-label="Меню">
+          <span></span><span></span>
+        </button>
+      </div>
+    </header>
+
+    <main id="top">
+      <!-- ── Живая проверка ───────────────────────────────────────────── -->
+      <section class="demo-section" id="demo">
+        <div class="wrap">
+          <article class="console">
+            <header class="console-top">
+              <div>
+                <p class="console-eyebrow">Живая проверка</p>
+                <h2 class="console-title">Сессия верификации</h2>
+              </div>
+              <div class="console-top-right">
+                <div class="status" id="status">ожидание</div>
+                <button class="btn btn-primary" id="startVerification" type="button">Начать проверку</button>
+              </div>
+            </header>
+
+            <div class="console-body">
+              <div class="console-main">
+                <div class="challenge-stage" id="challengeStage">
+                  <video id="camera" autoplay muted playsinline></video>
+                  <div class="face-guide" id="faceGuide" aria-hidden="true">
+                    <div class="face-oval" id="faceOval"></div>
+                    <p class="guide-hint" id="guideHint">Совместите лицо с овалом</p>
+                  </div>
+                  <div class="stage-overlay">
+                    <p id="currentStep">Проверка не запущена</p>
+                    <strong id="stageValue">Готовы?</strong>
+                    <small id="stepHint">Нажмите «Начать проверку» — понадобится доступ к камере и микрофону.</small>
+                  </div>
+                </div>
+
+                <div class="controls">
+                  <button class="btn btn-dark" id="primaryAction" type="button" disabled>Продолжить</button>
+                  <button class="btn btn-outline test-only" id="skipStep" type="button" disabled>Пропустить шаг</button>
+                  <button class="btn btn-outline" id="resetFlow" type="button">Сбросить</button>
+                </div>
+
+                <div class="result-block">
+                  <div class="decision" id="decision">не оценено</div>
+                  <div class="risk-line" id="riskLine"></div>
+                  <div class="checks" id="checksBreakdown"></div>
+                </div>
+              </div>
+            </div>
+
+            <details class="drawer">
+              <summary>Журнал проверки</summary>
+              <pre id="scoreJson"></pre>
+            </details>
+
+            <details class="drawer">
+              <summary>Параметры подключения</summary>
+              <div class="drawer-grid">
+                <label class="field">ML API<input id="apiUrl" value="http://localhost:8100" /></label>
+                <label class="field">UID<input id="uid" /></label>
+                <label class="field">ID проверки<input id="checkId" /></label>
+              </div>
+            </details>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap footer-bottom">
+        <span>AlfaDeepfake · внутренний контур Альфа-Банка</span>
+        <a href="./index.html">Об инструменте</a>
+      </div>
+    </footer>
+
+    <script src="./config.js"></script>
+    <script src="./app.js"></script>
+    <script src="./landing.js"></script>
+  </body>
+</html>
