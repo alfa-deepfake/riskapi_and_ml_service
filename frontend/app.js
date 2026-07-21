@@ -678,16 +678,11 @@ async function samplePulse() {
   setStatus("запись видео rPPG");
   try {
     // Fullscreen is requested once, while the user's tap still counts as an
-    // activation, and held across the retry (same reasoning as the flash check).
+    // activation, and held until the pulse capture finishes.
     await enterFullscreenIfPossible();
     let analysis;
     try {
       analysis = await capturePulseAttempt();
-      if (analysis.status !== "passed") {
-        logLine(`пульс: ${statusRu(analysis.status)} — повторная попытка, не двигайтесь`);
-        setStatus("пульс: повторная попытка");
-        analysis = pickBetterPulse(analysis, await capturePulseAttempt());
-      }
     } finally {
       await exitFullscreenIfOwned();
     }
@@ -764,14 +759,6 @@ async function capturePulseAttempt() {
   } finally {
     stopElapsed();
   }
-}
-
-// The retry keeps whichever attempt looked better: pass beats non-pass, then
-// higher signal quality wins.
-function pickBetterPulse(first, second) {
-  if (first.status === "passed") return first;
-  if (second.status === "passed") return second;
-  return (second.evidence?.signal_quality ?? 0) >= (first.evidence?.signal_quality ?? 0) ? second : first;
 }
 
 // Level check on arbitrary speech BEFORE any phrase is disclosed: re-tries at
