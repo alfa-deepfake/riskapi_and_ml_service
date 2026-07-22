@@ -10,15 +10,29 @@ const STATUS_RU = {
   unknown: "неизвестно",
   skipped: "пропущено",
   pending: "ожидание",
-  allow: "разрешено",
-  // "review" is the uncertain middle verdict (neither a clear live person nor a
-  // clear deepfake); phrase it plainly for the user instead of "проверка".
-  review: "Высокий риск дипфейка",
-  deny: "отказано",
 };
 
 function statusRu(value) {
   return STATUS_RU[value] || value;
+}
+
+// The headline verdict is a graded deepfake-risk band derived from the numeric
+// risk_score, not the raw allow/review/deny decision. A single failed check no
+// longer forces a "high risk" banner — the wording (and colour) track the
+// averaged risk. cls reuses the existing .decision.{allow,review,deny} styles.
+// A band matches when score < max; boundaries belong to the higher band
+// (0.2 → "умеренный", matching "<0.2 = низкий").
+const RISK_BANDS = [
+  { max: 0.2, label: "Низкий риск дипфейка", cls: "allow" },
+  { max: 0.4, label: "Умеренный риск дипфейка", cls: "allow" },
+  { max: 0.6, label: "Средний риск дипфейка", cls: "review" },
+  { max: 0.8, label: "Высокий риск дипфейка", cls: "review" },
+  { max: Infinity, label: "Явный дипфейк", cls: "deny" },
+];
+
+function riskBand(score) {
+  const value = typeof score === "number" ? score : 0.5;
+  return RISK_BANDS.find((band) => value < band.max) || RISK_BANDS[RISK_BANDS.length - 1];
 }
 
 // Check identifiers from the server, mapped to Russian labels for the score

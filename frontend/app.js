@@ -972,12 +972,13 @@ async function submitEvidence() {
   // The check is over — release the camera right away instead of waiting
   // for a manual reset.
   stopCamera();
-  el.decision.className = `decision ${result.decision}`;
+  const band = riskBand(result.risk_score);
+  el.decision.className = `decision ${band.cls}`;
   el.decision.dataset.decision = result.decision;
-  el.decision.textContent = statusRu(result.decision);
+  el.decision.textContent = band.label;
   el.riskLine.textContent = `риск ${fmt(result.risk_score)} · уверенность ${fmt(result.confidence)}`;
   renderChecksBreakdown(result);
-  logLine(`оценка: ${statusRu(result.decision)} (риск ${fmt(result.risk_score)})`);
+  logLine(`оценка: ${band.label} (риск ${fmt(result.risk_score)})`);
   el.scoreJson.textContent += `\n${JSON.stringify(result, null, 2)}\n`;
   el.scoreJson.scrollTop = el.scoreJson.scrollHeight;
   setStatus("оценено");
