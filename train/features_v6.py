@@ -24,7 +24,9 @@ from PIL import Image
 from scipy.ndimage import gaussian_filter
 from scipy.stats import kurtosis, skew
 
+from data import GEN_ID, collect, apply_degradation
 from face_crop import crop_from_path
+from quality import quality_features
 
 FACE_CROP_SIZE = 512
 FFT_SIZE = 256

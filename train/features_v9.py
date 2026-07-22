@@ -26,7 +26,9 @@ from PIL import Image
 from scipy.ndimage import gaussian_filter
 from scipy.stats import kurtosis
 
+from data import collect, apply_degradation
 from face_crop import crop_from_path
+from quality import quality_features
 from features_v6 import base_v5, candidates_v6, FACE_CROP_SIZE, FFT_SIZE, DEGRADE_CONFIGS
 from features_v7 import candidates_v7
 from features_v8 import candidates_v8
