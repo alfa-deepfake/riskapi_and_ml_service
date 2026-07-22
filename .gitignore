@@ -9,3 +9,7 @@ __pycache__/
 # Large model files are stored through Git LFS; their tracking rules are in
 # .gitattributes. Small v15 XGB trees, configs, and the CNN calibrator remain
 # regular Git files.
+
+# Downloaded at deploy time (scripts/download_runtime_models.sh), never committed.
+models/insightface/
+v16_release.tar.gz
