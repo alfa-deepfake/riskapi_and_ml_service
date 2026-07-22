@@ -32,7 +32,6 @@ from typing import Any
 import cv2
 import joblib
 import numpy as np
-import timm
 import torch
 import xgboost
 from PIL import Image
@@ -50,6 +49,7 @@ from features_v6 import candidates_v6  # noqa: E402
 from features_v7 import candidates_v7  # noqa: E402
 from features_v8 import candidates_v8  # noqa: E402
 from features_v9 import candidates_v9  # noqa: E402
+from model_def import make_model  # noqa: E402
 from noise_map_v15 import noise_map_tensor  # noqa: E402
 
 FACE_CROP_SIZE = 512
@@ -238,7 +238,7 @@ class V15VideoAdapter:
             ckpt = torch.load(
                 cnn_dir / f"noise_cnn_holdout_{held}.pt", map_location="cpu", weights_only=True
             )
-            model = timm.create_model("convnext_tiny", pretrained=False, num_classes=1)
+            model = make_model(False)
             model.load_state_dict(ckpt["state_dict"])
             model.eval()
             folds.append((model, float(cnn_cfg["folds"][held]["temperature"])))
