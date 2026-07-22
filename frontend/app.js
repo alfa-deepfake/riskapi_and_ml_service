@@ -721,11 +721,11 @@ async function samplePulse() {
   setStatus("пульс замерен");
 }
 
-// One 18s recording under the screen torch + server analysis. The white
+// One 8s recording under the screen torch + server analysis. The white
 // overlay turns the display into a light source aimed at the face: in a dim
 // room that is the difference between "no pulse signal" and a clean rPPG read.
 async function capturePulseAttempt() {
-  const durationMs = 18000;
+  const durationMs = 8000;
   el.flashFullscreen.style.backgroundColor = "#ffffff";
   el.flashFullscreen.classList.add("visible");
   el.flashMessage.classList.add("visible");
@@ -738,8 +738,6 @@ async function capturePulseAttempt() {
   const timer = window.setInterval(render, 250);
   let blob;
   try {
-    // 18s instead of the original 9: rPPG needs a long stable face window,
-    // and short clips were the main source of low-SQI "unknown" verdicts.
     blob = await recordWithCountdown(durationMs, "ПУЛЬС");
   } finally {
     window.clearInterval(timer);

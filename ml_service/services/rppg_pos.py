@@ -30,7 +30,9 @@ BAND_HZ = (0.75, 2.35)
 SNR_BAND_HZ = (0.6, 4.8)
 PEAK_WINDOW_HZ = 0.25
 HARMONIC_WINDOW_HZ = 0.35
-MIN_TRACE_SECONDS = 8.0
+# Must stay below the frontend's 8s capture: the usable face trace of an 8s
+# clip lands just under 8s after detection warmup and dropped frames.
+MIN_TRACE_SECONDS = 6.0
 MAX_FRAMES = 1200
 # Every Nth frame runs face detection; the box is forward-filled in between —
 # the subject holds still during the pulse step, RGB means are per-frame.
