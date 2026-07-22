@@ -7,6 +7,11 @@ from ml_service.config import Settings
 from ml_service.core.checks import score_active_light, score_audio, score_classifier, score_gesture, score_rppg
 from ml_service.core.math_utils import clamp01
 
+# Challenge-response checks are scored apart from the passive signal average:
+# passing them must not dilute a bad video score, and failing BOTH together is
+# not a technical glitch — it means a pre-recorded stream or disabled devices.
+CHALLENGE_CHECKS = ("gesture", "audio")
+
 
 class CascadeScorer:
     def __init__(self, settings: Settings) -> None:
@@ -16,6 +21,8 @@ class CascadeScorer:
         checks = self._evaluate(request)
         risk_score = _weighted_risk(checks)
         confidence = _weighted_confidence(checks)
+        if _challenge_pair_failed(checks):
+            risk_score = 1.0
         decision = _decision(
             checks,
             risk_score,
@@ -43,8 +50,13 @@ class CascadeScorer:
         ]
 
 
+def _challenge_pair_failed(checks: list[CheckScore]) -> bool:
+    statuses = {check.name: check.status for check in checks}
+    return all(statuses.get(name) == "failed" for name in CHALLENGE_CHECKS)
+
+
 def _weighted_risk(checks: list[CheckScore]) -> float:
-    active = [check for check in checks if check.status != "skipped"]
+    active = [check for check in checks if check.status != "skipped" and check.name not in CHALLENGE_CHECKS]
     total_weight = sum(check.weight for check in active)
     if total_weight <= 0.0:
         return 0.5
@@ -52,7 +64,7 @@ def _weighted_risk(checks: list[CheckScore]) -> float:
 
 
 def _weighted_confidence(checks: list[CheckScore]) -> float:
-    active = [check for check in checks if check.status not in ("skipped", "unknown")]
+    active = [check for check in checks if check.status not in ("skipped", "unknown") and check.name not in CHALLENGE_CHECKS]
     total_weight = sum(check.weight for check in active)
     if total_weight <= 0.0:
         return 0.0
@@ -60,7 +72,8 @@ def _weighted_confidence(checks: list[CheckScore]) -> float:
 
 
 def _decision(checks: list[CheckScore], risk_score: float, *, allow_threshold: float, deny_threshold: float):
-    # Deny is driven by the averaged weighted risk, never by a single check: an
+    # Deny is driven by the averaged weighted risk of the passive checks (the
+    # challenge pair is scored apart; both failing forces risk 1.0 upstream): an
     # individual check can fail for benign reasons (poor webcam/mic, slow link),
     # so one bad signal sends the session to review, while consistently bad
     # signals push the average over the deny threshold. A failed or missing
@@ -81,6 +94,8 @@ def _decision(checks: list[CheckScore], risk_score: float, *, allow_threshold: f
 
 def _factors(checks: list[CheckScore]) -> list[str]:
     factors: list[str] = []
+    if _challenge_pair_failed(checks):
+        factors.append("challenge: gesture and audio both failed — pre-recorded stream or disabled devices suspected")
     for check in checks:
         if check.status == "failed":
             factors.append(f"{check.name}: {check.reason}")

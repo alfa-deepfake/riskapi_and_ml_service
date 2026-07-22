@@ -106,6 +106,91 @@ def test_failed_classifier_blocks_allow_despite_passing_liveness():
     assert result.decision == "review"
 
 
+def test_gesture_and_audio_both_failed_force_max_risk():
+    challenge = generate_challenge(seed=21)
+    light = next(step for step in challenge.steps if step.type == "active_light")
+    gesture = next(step for step in challenge.steps if step.type == "gesture")
+    audio = next(step for step in challenge.steps if step.type == "audio_phrase")
+
+    result = CascadeScorer(settings).score(
+        ScoreRequest(
+            uid="u1",
+            check_id="c1",
+            challenge=challenge,
+            evidence=EvidenceBundle(
+                classifier=ClassifierEvidence(fake_probability=0.05, confidence=0.95, frame_count=24, face_present=True),
+                active_light=ActiveLightEvidence(
+                    expected_luma=light.payload["luma_sequence"],
+                    observed_face_luma=light.payload["luma_sequence"],
+                    face_present=True,
+                ),
+                rppg=RppgEvidence(bpm=72.0, signal_quality=0.82, detector="python-rppg", face_present=True),
+                gesture=GestureEvidence(
+                    expected_action=gesture.payload["expected_action"],
+                    observed_action="__wrong_action__",
+                    confidence=0.9,
+                    detector="unit-test-detector",
+                    face_present=True,
+                ),
+                audio=AudioEvidence(
+                    phrase_expected=audio.payload["phrase"],
+                    phrase_transcribed="",
+                    ai_probability=0.95,
+                ),
+            ),
+        )
+    )
+
+    # Both challenge checks failing together is a pre-recorded stream or
+    # disabled devices, never a benign glitch — clean passive signals must
+    # not average it away.
+    assert result.risk_score == 1.0
+    assert result.decision == "deny"
+    assert any("gesture and audio both failed" in factor for factor in result.factors)
+
+
+def test_deepfake_video_not_diluted_by_perfect_gesture_and_audio():
+    challenge = generate_challenge(seed=23)
+    gesture = next(step for step in challenge.steps if step.type == "gesture")
+    audio = next(step for step in challenge.steps if step.type == "audio_phrase")
+
+    result = CascadeScorer(settings).score(
+        ScoreRequest(
+            uid="u1",
+            check_id="c1",
+            challenge=challenge,
+            evidence=EvidenceBundle(
+                classifier=ClassifierEvidence(fake_probability=0.95, confidence=0.95, face_present=True),
+                active_light=ActiveLightEvidence(
+                    expected_luma=[0, 255, 0, 255, 0, 255],
+                    observed_face_luma=[120, 121, 120, 121, 120, 121],
+                    face_present=True,
+                ),
+                rppg=RppgEvidence(bpm=53.33, signal_quality=0.60, detector="rppg-toolbox-pos", face_present=True),
+                gesture=GestureEvidence(
+                    expected_action=gesture.payload["expected_action"],
+                    observed_action=gesture.payload["expected_action"],
+                    confidence=0.95,
+                    detector="unit-test-detector",
+                    face_present=True,
+                ),
+                audio=AudioEvidence(
+                    phrase_expected=audio.payload["phrase"],
+                    phrase_transcribed=audio.payload["phrase"],
+                    ai_probability=0.02,
+                    speaker_match_probability=0.95,
+                ),
+            ),
+        )
+    )
+
+    # Perfectly faked gesture/audio must not pull a failing video stack down
+    # to a medium score: the challenge pair is out of the weighted average.
+    # The same evidence scored ~0.35 when the pair was still averaged in.
+    assert result.decision != "allow"
+    assert result.risk_score >= 0.5
+
+
 def test_high_risk_classifier_and_audio_are_denied():
     result = CascadeScorer(settings).score(
         ScoreRequest(
